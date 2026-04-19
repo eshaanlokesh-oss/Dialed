@@ -223,7 +223,12 @@ export const ACHIEVEMENTS = [
 ];
 
 export function getExerciseById(id) {
-  return EXERCISES.find((e) => e.id === id);
+  const found = EXERCISES.find((e) => e.id === id);
+  if (found) return found;
+  try {
+    const custom = JSON.parse(localStorage.getItem("dialed_custom_exercises") || "[]");
+    return custom.find((e) => e.id === id) || null;
+  } catch { return null; }
 }
 
 export function getExercisesByMuscle(muscle) {
