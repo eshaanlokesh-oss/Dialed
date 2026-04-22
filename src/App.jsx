@@ -1,8 +1,6 @@
 import React from 'react';
 import {
   THEMES, MC, TWEAK_DEFAULTS, DEFAULT_ROUTINES,
-  DEMO_HISTORY, DEMO_WEEKS, DEMO_WEEK_CHART, DEMO_MUSCLE_SETS,
-  DEMO_CAL_WORKOUTS, DEMO_PRS, DEMO_PROGRESSION, DEMO_BODYWEIGHT,
   ALL_EXERCISES, EXERCISE_TYPES, EXERCISE_TYPE_COLORS,
 } from './data.js';
 
@@ -1934,12 +1932,126 @@ export default function App(){
     setCustomExercises(updated);persist({customExercises:updated});
   };
 
-  // Derived
-  const weekChart=historyData.length>0?DEMO_WEEK_CHART:[];
-  const muscleSets=historyData.length>0?DEMO_MUSCLE_SETS:[];
-  const historyWeeks=historyData.length>0?DEMO_WEEKS:[];
-  const calWorkouts=historyData.length>0?DEMO_CAL_WORKOUTS:{};
-  const prsData=historyData.length>0?DEMO_PRS:[];
+  // ─── Derived from real history ────────────────────────────
+  const weekChart = React.useMemo(() => {
+    const today = new Date();
+    const dow = today.getDay(); // 0=Sun
+    const days = ['S','M','T','W','T','F','S'];
+    // Build a map of date string -> volume from history
+    const volByDate = {};
+    historyData.forEach(s => {
+      // Try to parse date from session — use id-based fallback
+      const raw = s.date || '';
+      // Sessions have dates like "Today, Apr 19" or "Fri, Apr 17" — parse them
+      let d = null;
+      try {
+        const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
+        d = new Date(`${cleaned} 2026`);
+      } catch(e) {}
+      if(d && !isNaN(d)) {
+        const key = d.toDateString();
+        volByDate[key] = (volByDate[key]||0) + (s.volume||0);
+      }
+    });
+    return Array.from({length:7},(_,i)=>{
+      const d = new Date(today);
+      d.setDate(today.getDate() - dow + i);
+      const v = volByDate[d.toDateString()]||0;
+      return { d: days[i], v, today: i===dow };
+    });
+  }, [historyData]);
+
+  const muscleSets = React.useMemo(() => {
+    const counts = {};
+    historyData.forEach(session => {
+      (session.exercises||[]).forEach(ex => {
+        const exInfo = ALL_EXERCISES.find(e => e.name === ex.name);
+        const muscle = exInfo?.muscle || 'Full Body';
+        counts[muscle] = (counts[muscle]||0) + (ex.sets?.length||0);
+      });
+    });
+    return Object.entries(counts)
+      .sort((a,b) => b[1]-a[1])
+      .slice(0,6)
+      .map(([n,s]) => ({n,s}));
+  }, [historyData]);
+
+  const historyWeeks = React.useMemo(() => {
+    if(!historyData.length) return [];
+    // Group into This Week / Last Week / older
+    const today = new Date();
+    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate()-today.getDay());
+    const startOfLastWeek = new Date(startOfWeek); startOfLastWeek.setDate(startOfWeek.getDate()-7);
+    const thisWeek = [], lastWeek = [], older = [];
+    historyData.forEach(s => {
+      const raw = s.date||'';
+      let d = null;
+      try {
+        const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
+        d = new Date(`${cleaned} 2026`);
+      } catch(e){}
+      if(d && !isNaN(d)){
+        if(d >= startOfWeek) thisWeek.push(s);
+        else if(d >= startOfLastWeek) lastWeek.push(s);
+        else older.push(s);
+      } else {
+        thisWeek.push(s);
+      }
+    });
+    const makeWeek = (label, sessions) => sessions.length===0 ? null : ({
+      label,
+      ids: sessions.map(s=>s.id),
+      vol: sessions.reduce((a,s)=>a+(s.volume||0),0),
+      workouts: sessions.length,
+    });
+    return [makeWeek('This Week',thisWeek), makeWeek('Last Week',lastWeek), older.length?makeWeek('Earlier',older):null].filter(Boolean);
+  }, [historyData]);
+
+  const calWorkouts = React.useMemo(() => {
+    const map = {};
+    historyData.forEach(s => {
+      const raw = s.date||'';
+      let d = null;
+      try {
+        const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
+        d = new Date(`${cleaned} 2026`);
+      } catch(e){}
+      if(d && !isNaN(d)){
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        map[key] = {
+          routine: s.routine,
+          muscles: s.muscles,
+          volume: s.volume||0,
+          duration: s.duration,
+          sets: s.sets,
+          pr: s.exercises?.some(e=>e.pr)||false,
+        };
+      }
+    });
+    return map;
+  }, [historyData]);
+
+  const prsData = React.useMemo(() => {
+    const prs = [];
+    const seen = new Set();
+    historyData.forEach(s => {
+      (s.exercises||[]).forEach(ex => {
+        if(ex.pr && !seen.has(ex.name)){
+          seen.add(ex.name);
+          const best = ex.sets?.reduce((a,set)=>set.w>a.w?set:a, ex.sets[0]);
+          const exInfo = ALL_EXERCISES.find(e=>e.name===ex.name);
+          prs.push({
+            exercise: ex.name,
+            weight: best?.w||0,
+            reps: best?.r||0,
+            date: s.date?.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'')||'',
+            muscle: exInfo?.muscle||'Full Body',
+          });
+        }
+      });
+    });
+    return prs;
+  }, [historyData]);
 
   if(!onboarded){
     return(
