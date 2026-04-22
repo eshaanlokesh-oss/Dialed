@@ -107,13 +107,21 @@ function OnboardingScreen({onComplete}){
   const [theme,setTheme]=React.useState('Ice');
   const accent=THEMES[theme]?.p||'#7dd3fc';
   const rgb=h2r(accent);
-  const canNext=step===0||(step===1&&name.trim().length>0)||step>=2;
-  const steps=4;
+  const TOTAL_STEPS=5;
+  const canNext=step===0||(step===1&&name.trim().length>0)||step===2||step===3||step===4;
+
+  const PRESET_ROUTINES=[
+    {name:'Push A',muscles:['Chest','Shoulders','Triceps'],exercises:6,desc:'Bench, OHP, Cable Fly, Laterals...'},
+    {name:'Pull B',muscles:['Back','Biceps'],exercises:5,desc:'Deadlift, Pull-Up, Cable Row...'},
+    {name:'Legs C',muscles:['Quads','Hamstrings','Glutes'],exercises:7,desc:'Squat, Romanian DL, Leg Press...'},
+    {name:'Upper D',muscles:['Chest','Back','Shoulders'],exercises:8,desc:'DB Bench, Bent Row, OHP...'},
+  ];
+
   return(
     <div style={{position:'absolute',inset:0,zIndex:500,background:'#0a0a0a',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'0 32px'}}>
       <div style={{position:'absolute',top:'18%',left:'50%',transform:'translateX(-50%)',width:280,height:280,borderRadius:'50%',background:`rgba(${rgb},0.1)`,filter:'blur(80px)',pointerEvents:'none'}}/>
       <div style={{position:'absolute',top:68,display:'flex',gap:8}}>
-        {Array.from({length:steps},(_,i)=>(
+        {Array.from({length:TOTAL_STEPS},(_,i)=>(
           <div key={i} style={{width:i===step?20:6,height:6,borderRadius:3,background:i===step?accent:'rgba(255,255,255,0.12)',transition:'all 0.3s'}}/>
         ))}
       </div>
@@ -160,21 +168,53 @@ function OnboardingScreen({onComplete}){
             </div>
           </div>
         )}
+        {step===4&&(
+          <div style={{animation:'dialIn 0.35s ease'}}>
+            <div style={{fontSize:28,fontWeight:800,color:'#fff',letterSpacing:-1,marginBottom:8}}>Start with routines?</div>
+            <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:24,lineHeight:1.6}}>We have 4 pre-built Push/Pull/Legs routines ready to go. You can always edit or delete them later.</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:8}}>
+              {PRESET_ROUTINES.map(r=>{
+                const pc=MC[r.muscles[0]]||accent; const cr=h2r(pc);
+                return(
+                  <div key={r.name} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:`rgba(${cr},0.06)`,border:`1px solid rgba(${cr},0.15)`,borderRadius:16}}>
+                    <div style={{width:36,height:36,borderRadius:11,background:`rgba(${cr},0.15)`,border:`1px solid rgba(${cr},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:pc,flexShrink:0}}>{r.name[0]}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:2}}>{r.name}</div>
+                      <div style={{fontSize:11,color:'rgba(255,255,255,0.3)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.desc}</div>
+                    </div>
+                    <div style={{display:'flex',gap:4,flexShrink:0}}>
+                      {r.muscles.map(m=>{const mc2=MC[m];return <div key={m} style={{width:8,height:8,borderRadius:4,background:mc2}}/>;}) }
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
-      <div style={{position:'absolute',bottom:56,left:32,right:32}}>
-        <div onClick={()=>{if(!canNext)return;if(step<steps-1)setStep(s=>s+1);else onComplete({name:name.trim()||'Athlete',unit,theme});}}
-          style={{height:56,borderRadius:18,background:canNext?`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`:'rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'center',cursor:canNext?'pointer':'default',transition:'all 0.2s',boxShadow:canNext?`0 8px 28px rgba(${rgb},0.35)`:'none'}}>
-          <span style={{fontSize:16,fontWeight:700,color:canNext?'#000':'rgba(255,255,255,0.2)'}}>
-            {step===steps-1?`Let's go, ${name||'Athlete'} →`:'Continue →'}
-          </span>
-        </div>
+      <div style={{position:'absolute',bottom:56,left:32,right:32,display:'flex',flexDirection:'column',gap:10}}>
+        {step===4?(
+          <>
+            <div onClick={()=>onComplete({name:name.trim()||'Athlete',unit,theme,usePresets:true})} style={{height:56,borderRadius:18,background:`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:`0 8px 28px rgba(${rgb},0.35)`}}>
+              <span style={{fontSize:16,fontWeight:700,color:'#000'}}>Yes, add pre-built routines →</span>
+            </div>
+            <div onClick={()=>onComplete({name:name.trim()||'Athlete',unit,theme,usePresets:false})} style={{height:48,borderRadius:18,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.4)'}}>No thanks, start blank</span>
+            </div>
+          </>
+        ):(
+          <div onClick={()=>{if(!canNext)return;setStep(s=>s+1);}}
+            style={{height:56,borderRadius:18,background:canNext?`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`:'rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'center',cursor:canNext?'pointer':'default',transition:'all 0.2s',boxShadow:canNext?`0 8px 28px rgba(${rgb},0.35)`:'none'}}>
+            <span style={{fontSize:16,fontWeight:700,color:canNext?'#000':'rgba(255,255,255,0.2)'}}>Continue →</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ─── Exercise Picker Sheet (shared by workout + routine builder) ─
-function ExercisePicker({accent,onAdd,onClose,customExercises=[]}){
+function ExercisePicker({accent,onAdd,onClose,customExercises=[],onNewCustomSaved}){
   const rgb=h2r(accent);
   const [search,setSearch]=React.useState('');
   const [muscle,setMuscle]=React.useState('All');
@@ -186,7 +226,7 @@ function ExercisePicker({accent,onAdd,onClose,customExercises=[]}){
     return ms&&mm;
   });
   if(showCreator) return(
-    <CustomExerciseCreator accent={accent} onClose={()=>setShowCreator(false)} onSave={ex=>{setShowCreator(false);onAdd(ex);}}/>
+    <CustomExerciseCreator accent={accent} onClose={()=>setShowCreator(false)} onSave={ex=>{setShowCreator(false);if(onNewCustomSaved)onNewCustomSaved(ex);onAdd(ex);}}/>
   );
   return(
     <div style={{position:'absolute',inset:0,zIndex:500,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
@@ -675,7 +715,7 @@ function BodyweightSheet({accent,unit,onClose,bwLog,onAdd}){
 }
 
 // ─── Workout Screen ───────────────────────────────────────────
-function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,progressionData,customExercises,historyData}){
+function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,progressionData,customExercises,historyData,onSaveCustomExercise,unit,userName}){
   const rgb=h2r(accent);
   const [elapsed,setElapsed]=React.useState(0);
   const [restTimer,setRestTimer]=React.useState(null);
@@ -686,6 +726,11 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
   const [finishConfirm,setFinishConfirm]=React.useState(false);
   const [saveRoutinePrompt,setSaveRoutinePrompt]=React.useState(false);
   const [pendingSave,setPendingSave]=React.useState(null);
+  const [showNotes,setShowNotes]=React.useState(false);
+  const [workoutNotes,setWorkoutNotes]=React.useState('');
+  const [showPlates,setShowPlates]=React.useState(false);
+  const [showShareCard,setShowShareCard]=React.useState(false);
+  const [localCustomExercises,setLocalCustomExercises]=React.useState(customExercises||[]);
 
   const originalExNames=React.useRef(routine.exercises.map(e=>e.name));
 
@@ -730,7 +775,7 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
   const removeSet=(ei,si)=>setSets(p=>{const n=p.map(ex=>ex.map(s=>({...s})));n[ei]=n[ei].filter((_,i)=>i!==si);return n;});
   const removeEx=(ei)=>{setExercises(p=>p.filter((_,i)=>i!==ei));setSets(p=>p.filter((_,i)=>i!==ei));};
   const toggleCollapse=(ei)=>setCollapsed(c=>({...c,[ei]:!c[ei]}));
-  const muscleFor=exName=>{const f=[...ALL_EXERCISES,...(customExercises||[])].find(e=>e.name===exName);return f?f.muscle:(routine.muscles[0]||'Full Body');};
+  const muscleFor=exName=>{const f=[...ALL_EXERCISES,...localCustomExercises].find(e=>e.name===exName);return f?f.muscle:(routine.muscles[0]||'Full Body');};
 
   const addExercise=ex=>{
     const prev=lastLogged[ex.name];
@@ -763,7 +808,11 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
           <div style={{fontSize:32,fontWeight:200,color:'#fff',letterSpacing:-1,lineHeight:1}}>{fmt(elapsed)}</div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          {/* Discard — moved to header */}
+          {/* Notes button */}
+          <div onClick={()=>setShowNotes(true)} style={{width:36,height:36,borderRadius:12,background:workoutNotes?`rgba(${rgb},0.15)`:'rgba(255,255,255,0.06)',border:workoutNotes?`1px solid rgba(${rgb},0.3)`:'1px solid rgba(255,255,255,0.09)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 2h11v9H2zM2 11l3 3M5 5h5M5 8h3" stroke={workoutNotes?accent:'rgba(255,255,255,0.35)'} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          {/* Discard */}
           <div onClick={()=>setDiscardConfirm(true)} style={{height:36,padding:'0 12px',borderRadius:12,background:'rgba(244,63,94,0.08)',border:'1px solid rgba(244,63,94,0.2)',display:'flex',alignItems:'center',cursor:'pointer'}}>
             <span style={{fontSize:13,fontWeight:600,color:'#f43f5e'}}>Discard</span>
           </div>
@@ -859,17 +908,25 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
         })}
       </div>
 
-      {/* Add exercise button */}
-      <div style={{padding:'4px 12px 28px',flexShrink:0}}>
-        <div onClick={()=>setShowAddEx(true)} style={{height:46,borderRadius:14,border:`1px dashed rgba(${rgb},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',gap:8}}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke={`rgba(${rgb},0.5)`} strokeWidth="1.8" strokeLinecap="round"/></svg>
-          <span style={{fontSize:13,fontWeight:600,color:`rgba(${rgb},0.55)`}}>Add Exercise</span>
+      {/* Add exercise + Plate calculator buttons */}
+      <div style={{padding:'4px 12px 28px',flexShrink:0,display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{display:'flex',gap:8}}>
+          <div onClick={()=>setShowAddEx(true)} style={{flex:1,height:46,borderRadius:14,border:`1px dashed rgba(${rgb},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',gap:8}}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke={`rgba(${rgb},0.5)`} strokeWidth="1.8" strokeLinecap="round"/></svg>
+            <span style={{fontSize:13,fontWeight:600,color:`rgba(${rgb},0.55)`}}>Add Exercise</span>
+          </div>
+          <div onClick={()=>setShowPlates(true)} style={{height:46,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.09)',background:'rgba(255,255,255,0.04)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',gap:7,flexShrink:0}}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.4"/><rect x="1" y="6.5" width="3" height="3" rx="1" stroke="rgba(255,255,255,0.35)" strokeWidth="1.2"/><rect x="12" y="6.5" width="3" height="3" rx="1" stroke="rgba(255,255,255,0.35)" strokeWidth="1.2"/><line x1="4" y1="8" x2="5.5" y2="8" stroke="rgba(255,255,255,0.35)" strokeWidth="1.4"/><line x1="10.5" y1="8" x2="12" y2="8" stroke="rgba(255,255,255,0.35)" strokeWidth="1.4"/></svg>
+            <span style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,0.4)',whiteSpace:'nowrap'}}>Plates</span>
+          </div>
         </div>
       </div>
 
-      {showAddEx&&<ExercisePicker accent={accent} onAdd={addExercise} onClose={()=>setShowAddEx(false)} customExercises={customExercises}/>}
-
+      {showAddEx&&<ExercisePicker accent={accent} onAdd={ex=>{addExercise(ex);}} onClose={()=>setShowAddEx(false)} customExercises={localCustomExercises} onNewCustomSaved={ex=>{const updated=[...localCustomExercises,ex];setLocalCustomExercises(updated);onSaveCustomExercise&&onSaveCustomExercise(ex);}}/>}
+      {showPlates&&<PlateCalculator accent={accent} unit={unit||'lbs'} onClose={()=>setShowPlates(false)}/>}
+      {showNotes&&<WorkoutNotesSheet accent={accent} notes={workoutNotes} onSave={t=>setWorkoutNotes(t)} onClose={()=>setShowNotes(false)}/>}
       {chartEx&&<ProgressionSheet exerciseName={chartEx} accent={accent} unit="lbs" onClose={()=>setChartEx(null)} progressionData={progressionData||{}}/>}
+      {showShareCard&&<ShareWorkoutCard accent={accent} routine={routine} elapsed={elapsed} doneSets={doneSets} totalSets={totalSets} exercises={exercises} sets={sets} unit={unit||'lbs'} userName={userName} onClose={()=>{setShowShareCard(false);onEnd({discard:false});}}/>}
 
       {/* Discard confirm — separate from finish flow */}
       {discardConfirm&&(
@@ -894,13 +951,17 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
         <div style={{position:'absolute',inset:0,zIndex:400,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
           <div style={{width:'100%',background:'#161616',borderRadius:'28px 28px 0 0',padding:'28px 22px 48px',border:'1px solid rgba(255,255,255,0.07)',borderBottom:'none'}}>
             <div style={{fontSize:20,fontWeight:700,color:'#fff',marginBottom:8,letterSpacing:-0.5}}>Finish workout?</div>
-            <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:28,lineHeight:1.5}}>{doneSets} sets logged · {fmt(elapsed)} elapsed</div>
+            <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:28,lineHeight:1.5}}>{doneSets} sets logged · {fmt(elapsed)} elapsed{workoutNotes&&' · Notes saved'}</div>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <div onClick={()=>{setFinishConfirm(false);handleFinish();}} style={{height:54,borderRadius:16,background:`linear-gradient(135deg,${accent},${THEMES['Crimson']?.p||accent})`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:`0 6px 24px rgba(${rgb},0.3)`}}>
                 <span style={{fontSize:16,fontWeight:700,color:'#000'}}>Save & Finish</span>
               </div>
-              <div onClick={()=>setFinishConfirm(false)} style={{height:54,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-                <span style={{fontSize:16,fontWeight:600,color:'rgba(255,255,255,0.4)'}}>Keep Going</span>
+              <div onClick={()=>{setFinishConfirm(false);setShowShareCard(true);}} style={{height:54,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',gap:8}}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 1l3 3-3 3M1 7v1a5 5 0 005 5h1M13 4H6a5 5 0 00-5 5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.4)'}}>Save & Share</span>
+              </div>
+              <div onClick={()=>setFinishConfirm(false)} style={{height:46,borderRadius:16,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                <span style={{fontSize:14,fontWeight:600,color:'rgba(255,255,255,0.3)'}}>Keep Going</span>
               </div>
             </div>
           </div>
@@ -924,6 +985,296 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Plate Calculator ─────────────────────────────────────────
+function PlateCalculator({accent,unit,onClose}){
+  const rgb=h2r(accent);
+  const [target,setTarget]=React.useState('');
+  const [barWeight,setBarWeight]=React.useState(unit==='kg'?20:45);
+  const BAR_OPTIONS_LBS=[{label:'Standard (45 lbs)',w:45},{label:'Short (35 lbs)',w:35},{label:'EZ Bar (25 lbs)',w:25},{label:'Custom',w:0}];
+  const BAR_OPTIONS_KG=[{label:'Olympic (20 kg)',w:20},{label:'Short (15 kg)',w:15},{label:'EZ Bar (7.5 kg)',w:7.5},{label:'Custom',w:0}];
+  const barOptions=unit==='kg'?BAR_OPTIONS_KG:BAR_OPTIONS_LBS;
+  const [customBar,setCustomBar]=React.useState('');
+  const [selectedBar,setSelectedBar]=React.useState(barOptions[0].label);
+  const PLATES_LBS=[45,35,25,10,5,2.5];
+  const PLATES_KG=[25,20,15,10,5,2.5,1.25];
+  const plateSet=unit==='kg'?PLATES_KG:PLATES_LBS;
+  const PLATE_COLORS={45:'#f472b6',35:'#60a5fa',25:'#34d399',10:'#facc15',5:'#fb923c',2.5:'#a78bfa',25.0:'#34d399',20:'#f472b6',15:'#60a5fa',1.25:'#94a3b8',7.5:'#fb923c'};
+
+  const effectiveBar=selectedBar==='Custom'?(parseFloat(customBar)||0):barOptions.find(b=>b.label===selectedBar)?.w||45;
+  const targetNum=parseFloat(target)||0;
+  const perSide=(targetNum-effectiveBar)/2;
+
+  // Calculate plates per side
+  const calcPlates=(remaining,plates)=>{
+    const result=[];
+    let rem=remaining;
+    for(const p of plates){
+      const count=Math.floor(rem/p+0.001);
+      if(count>0){result.push({plate:p,count});rem=Math.round((rem-p*count)*1000)/1000;}
+    }
+    return result;
+  };
+  const plates=perSide>0?calcPlates(perSide,plateSet):[];
+  const achievable=effectiveBar+plates.reduce((a,{plate,count})=>a+plate*count*2,0);
+  const isExact=targetNum>0&&Math.abs(achievable-targetNum)<0.01;
+
+  // Visual bar
+  const BAR_H=48; const BAR_W=320;
+  const plateRects=[];
+  let xOff=BAR_W/2+60;
+  plates.forEach(({plate,count})=>{
+    const pw=Math.max(18,plate*0.7); const ph=Math.min(80,28+plate*0.8);
+    for(let i=0;i<count;i++){
+      plateRects.push({x:xOff,w:pw,h:ph,color:PLATE_COLORS[plate]||'#94a3b8',label:plate});
+      xOff+=pw+3;
+    }
+  });
+
+  return(
+    <div style={{position:'absolute',inset:0,zIndex:500,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
+      <div style={{width:'100%',background:'#141414',borderRadius:'28px 28px 0 0',border:'1px solid rgba(255,255,255,0.08)',borderBottom:'none',maxHeight:'88%',display:'flex',flexDirection:'column',animation:'slideUp 0.28s cubic-bezier(0.32,0.72,0,1)'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'12px 0 0'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)'}}/></div>
+        <div style={{padding:'14px 20px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:700,color:'#fff',letterSpacing:-0.4}}>Plate Calculator</div>
+            {targetNum>0&&<div style={{fontSize:12,color:'rgba(255,255,255,0.3)',marginTop:2}}>Target: {targetNum} {unit}</div>}
+          </div>
+          <div onClick={onClose} style={{cursor:'pointer',opacity:0.35,padding:'6px'}}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg></div>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'16px 20px 36px'}}>
+          {/* Target weight input */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:10}}>Target Weight ({unit})</div>
+            <input autoFocus type="number" inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} placeholder={`e.g. ${unit==='kg'?'100':'225'}`} style={{width:'100%',background:'rgba(255,255,255,0.06)',border:`1px solid rgba(${rgb},0.25)`,borderRadius:14,padding:'14px 18px',fontSize:24,fontWeight:700,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif',letterSpacing:-0.5}}/>
+          </div>
+
+          {/* Bar selector */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:10}}>Bar</div>
+            <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+              {barOptions.map(b=>{const sel=selectedBar===b.label;return(
+                <div key={b.label} onClick={()=>setSelectedBar(b.label)} style={{padding:'6px 14px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${rgb},0.18)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${rgb},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:12,fontWeight:600,color:sel?accent:'rgba(255,255,255,0.4)',transition:'all 0.15s',flexShrink:0}}>{b.label}</div>
+              );})}
+            </div>
+            {selectedBar==='Custom'&&(
+              <input type="number" inputMode="decimal" value={customBar} onChange={e=>setCustomBar(e.target.value)} placeholder={`Bar weight in ${unit}`} style={{width:'100%',marginTop:10,background:'rgba(255,255,255,0.06)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:12,padding:'11px 14px',fontSize:15,fontWeight:600,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif'}}/>
+            )}
+          </div>
+
+          {/* Visual bar diagram */}
+          {targetNum>0&&(
+            <div style={{marginBottom:20,background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,padding:'20px 16px',overflowX:'auto'}}>
+              <div style={{minWidth:BAR_W,position:'relative',height:BAR_H+40}}>
+                <svg width={Math.max(BAR_W, xOff+20)} height={BAR_H+40} style={{display:'block',margin:'0 auto'}}>
+                  {/* Left sleeve */}
+                  <rect x={0} y={BAR_H/2-4} width={60} height={8} rx={4} fill="#444"/>
+                  {/* Bar */}
+                  <rect x={60} y={BAR_H/2-3} width={BAR_W/2-60} height={6} rx={3} fill="#333"/>
+                  {/* Bar label */}
+                  <text x={30} y={BAR_H/2+5} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="10" fontFamily="Outfit,sans-serif" fontWeight="600">{effectiveBar}</text>
+                  {/* Plates right side */}
+                  {plateRects.map((p,i)=>{
+                    const py=(BAR_H-p.h)/2;
+                    return(
+                      <g key={i}>
+                        <rect x={p.x} y={py} width={p.w} height={p.h} rx={4} fill={p.color} opacity="0.9"/>
+                        {p.w>16&&<text x={p.x+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
+                      </g>
+                    );
+                  })}
+                  {/* Mirror left side plates (reversed) */}
+                  {[...plateRects].reverse().map((p,i)=>{
+                    const mirrorX=BAR_W/2+60-1-((plateRects.length-1-i<plateRects.length)?plateRects.slice(0,plateRects.length-1-i).reduce((a,pp)=>a+pp.w+3,0)+p.w:0);
+                    const adjustedX=BAR_W/2-(xOff-BAR_W/2-60)-p.w+plateRects.slice(0,plateRects.length-1-i).reduce((a,pp)=>a+pp.w+3,0);
+                    const py=(BAR_H-p.h)/2;
+                    return(
+                      <g key={`l${i}`}>
+                        <rect x={adjustedX} y={py} width={p.w} height={p.h} rx={4} fill={p.color} opacity="0.9"/>
+                        {p.w>16&&<text x={adjustedX+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Plates per side list */}
+          {targetNum>0&&(
+            <div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.2,textTransform:'uppercase'}}>Each Side</div>
+                {!isExact&&targetNum>0&&<div style={{fontSize:12,fontWeight:600,color:'#fb923c'}}>Closest: {achievable} {unit}</div>}
+                {isExact&&<div style={{fontSize:12,fontWeight:700,color:accent}}>✓ Exact</div>}
+              </div>
+              {perSide<=0?(
+                <div style={{fontSize:13,color:'rgba(255,255,255,0.3)',textAlign:'center',padding:'20px 0'}}>Target must be greater than bar weight ({effectiveBar} {unit})</div>
+              ):plates.length===0?(
+                <div style={{fontSize:13,color:'rgba(255,255,255,0.3)',textAlign:'center',padding:'20px 0'}}>No plates needed</div>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {plates.map(({plate,count})=>{
+                    const c=PLATE_COLORS[plate]||'#94a3b8';const cr=h2r(c);
+                    return(
+                      <div key={plate} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:`rgba(${cr},0.07)`,border:`1px solid rgba(${cr},0.18)`,borderRadius:14}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                          <div style={{width:36,height:36,borderRadius:10,background:c,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#000'}}>{plate}</div>
+                          <span style={{fontSize:15,fontWeight:600,color:'#fff'}}>{plate} {unit} plate</span>
+                        </div>
+                        <div style={{fontSize:18,fontWeight:800,color:c}}>× {count}</div>
+                      </div>
+                    );
+                  })}
+                  <div style={{padding:'10px 16px',background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:14,display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}}>
+                    <span style={{fontSize:13,color:'rgba(255,255,255,0.35)',fontWeight:500}}>Per side total</span>
+                    <span style={{fontSize:15,fontWeight:700,color:'rgba(255,255,255,0.7)'}}>{perSide} {unit}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Workout Notes Sheet ──────────────────────────────────────
+function WorkoutNotesSheet({accent,notes,onSave,onClose}){
+  const rgb=h2r(accent);
+  const [text,setText]=React.useState(notes||'');
+  return(
+    <div style={{position:'absolute',inset:0,zIndex:500,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
+      <div style={{width:'100%',background:'#141414',borderRadius:'28px 28px 0 0',border:'1px solid rgba(255,255,255,0.08)',borderBottom:'none',animation:'slideUp 0.28s cubic-bezier(0.32,0.72,0,1)'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'12px 0 0'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)'}}/></div>
+        <div style={{padding:'14px 20px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+          <div style={{fontSize:18,fontWeight:700,color:'#fff',letterSpacing:-0.4}}>Workout Notes</div>
+          <div style={{display:'flex',gap:8}}>
+            <div onClick={()=>{onSave(text);onClose();}} style={{height:32,padding:'0 16px',borderRadius:10,background:`rgba(${rgb},0.18)`,border:`1px solid rgba(${rgb},0.3)`,display:'flex',alignItems:'center',cursor:'pointer'}}>
+              <span style={{fontSize:13,fontWeight:700,color:accent}}>Save</span>
+            </div>
+            <div onClick={onClose} style={{cursor:'pointer',opacity:0.35,padding:'6px 2px'}}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg></div>
+          </div>
+        </div>
+        <div style={{padding:'16px 20px 48px'}}>
+          <textarea
+            autoFocus
+            value={text}
+            onChange={e=>setText(e.target.value)}
+            placeholder="How did the session feel? Any notes on form, energy, sleep..."
+            rows={6}
+            style={{width:'100%',background:'rgba(255,255,255,0.05)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:16,padding:'14px 16px',fontSize:15,fontWeight:400,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif',resize:'none',lineHeight:1.6,color:'rgba(255,255,255,0.85)'}}
+          />
+          <div style={{fontSize:11,color:'rgba(255,255,255,0.2)',marginTop:8,textAlign:'right'}}>{text.length} characters</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Share Workout Card ───────────────────────────────────────
+function ShareWorkoutCard({accent,routine,elapsed,doneSets,totalSets,exercises,sets,unit,userName,onClose}){
+  const rgb=h2r(accent);
+  const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  const vol=exercises.reduce((total,ex,ei)=>{
+    return total+(sets[ei]||[]).filter(s=>s.done).reduce((a,s)=>a+(parseFloat(s.weight)||0)*(parseInt(s.reps)||0),0);
+  },0);
+  const prs=exercises.filter((_,ei)=>(sets[ei]||[]).some(s=>s.done&&parseFloat(s.weight)>0));
+
+  const topExercises=exercises.filter((_,ei)=>(sets[ei]||[]).some(s=>s.done)).slice(0,4);
+
+  return(
+    <div style={{position:'absolute',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.85)',backdropFilter:'blur(12px)',padding:'20px'}}>
+      <div style={{width:'100%',maxWidth:340,animation:'popIn 0.3s ease'}}>
+        {/* The card */}
+        <div style={{background:'linear-gradient(145deg,#111 0%,#0a0a0a 100%)',border:`1px solid rgba(${rgb},0.25)`,borderRadius:28,overflow:'hidden',boxShadow:`0 24px 64px rgba(0,0,0,0.8),0 0 0 1px rgba(${rgb},0.1)`}}>
+          {/* Top glow */}
+          <div style={{height:4,background:`linear-gradient(90deg,transparent,${accent},transparent)`}}/>
+          <div style={{padding:'24px 22px 20px'}}>
+            {/* Header */}
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:`rgba(${rgb},0.7)`,letterSpacing:1.5,textTransform:'uppercase',marginBottom:4}}>Dialed</div>
+                <div style={{fontSize:26,fontWeight:800,color:'#fff',letterSpacing:-0.8,lineHeight:1.1}}>{routine.name}</div>
+                {userName&&<div style={{fontSize:13,color:'rgba(255,255,255,0.35)',marginTop:3}}>{userName}</div>}
+              </div>
+              <div style={{width:44,height:44,borderRadius:14,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>🏋️</div>
+            </div>
+
+            {/* Stats row */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>
+              {[{v:fmt(elapsed),l:'Duration'},{v:`${doneSets}`,l:'Sets'},{v:`${Math.round(vol/1000*10)/10}k`,l:unit}].map((s,i)=>{
+                const colors=['#60a5fa','#34d399',accent];
+                return(
+                  <div key={s.l} style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:14,padding:'10px 8px',textAlign:'center'}}>
+                    <div style={{fontSize:18,fontWeight:700,color:colors[i],letterSpacing:-0.5}}>{s.v}</div>
+                    <div style={{fontSize:9.5,color:'rgba(255,255,255,0.3)',fontWeight:600,letterSpacing:0.8,textTransform:'uppercase',marginTop:2}}>{s.l}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Exercises */}
+            {topExercises.length>0&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.2)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:10}}>Exercises</div>
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {topExercises.map((ex,i)=>{
+                    const ei=exercises.indexOf(ex);
+                    const doneSetsForEx=(sets[ei]||[]).filter(s=>s.done);
+                    const bestWeight=Math.max(...doneSetsForEx.map(s=>parseFloat(s.weight)||0),0);
+                    const mc=MC[ALL_EXERCISES.find(e=>e.name===ex.name)?.muscle]||accent;
+                    return(
+                      <div key={ex.name} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:'rgba(255,255,255,0.03)',borderRadius:11}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <div style={{width:6,height:6,borderRadius:3,background:mc,flexShrink:0}}/>
+                          <span style={{fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.8)'}}>{ex.name}</span>
+                        </div>
+                        <span style={{fontSize:12,color:'rgba(255,255,255,0.35)',fontWeight:500}}>{doneSetsForEx.length} sets · {bestWeight}{unit}</span>
+                      </div>
+                    );
+                  })}
+                  {exercises.filter((_,ei)=>(sets[ei]||[]).some(s=>s.done)).length>4&&(
+                    <div style={{fontSize:11,color:'rgba(255,255,255,0.2)',textAlign:'center',padding:'4px 0'}}>+{exercises.filter((_,ei)=>(sets[ei]||[]).some(s=>s.done)).length-4} more exercises</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Muscle pills */}
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {routine.muscles.map(m=>{const c=MC[m]||accent;const cr=h2r(c);return(
+                <div key={m} style={{padding:'4px 10px',borderRadius:100,background:`rgba(${cr},0.12)`,border:`1px solid rgba(${cr},0.25)`,fontSize:11,fontWeight:700,color:c}}>{m}</div>
+              );})}
+            </div>
+          </div>
+          <div style={{height:2,background:`linear-gradient(90deg,transparent,rgba(${rgb},0.3),transparent)`,margin:'0 22px 16px'}}/>
+          <div style={{padding:'0 22px 20px',display:'flex',alignItems:'center',gap:6}}>
+            <div style={{width:16,height:16,borderRadius:5,background:`rgba(${rgb},0.3)`,border:`1px solid rgba(${rgb},0.5)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:accent}}>D</div>
+            <span style={{fontSize:11,color:'rgba(255,255,255,0.2)',fontWeight:500,letterSpacing:0.3}}>dialed.app</span>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{display:'flex',gap:10,marginTop:16}}>
+          <div onClick={onClose} style={{flex:1,height:48,borderRadius:16,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <span style={{fontSize:14,fontWeight:600,color:'rgba(255,255,255,0.5)'}}>Close</span>
+          </div>
+          <div onClick={()=>{
+            if(navigator.share){navigator.share({title:`${routine.name} Workout`,text:`Just finished ${routine.name} — ${doneSets} sets, ${fmt(elapsed)} on Dialed 💪`}).catch(()=>{});} else {
+              const txt=`Just finished ${routine.name} — ${doneSets} sets, ${fmt(elapsed)} 💪 #Dialed`;
+              navigator.clipboard?.writeText(txt).then(()=>alert('Copied to clipboard!'));
+            }
+          }} style={{flex:1,height:48,borderRadius:16,background:`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`,display:'flex',alignItems:'center',justifyContent:'center',gap:8,cursor:'pointer',boxShadow:`0 6px 20px rgba(${rgb},0.35)`}}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 1l3 3-3 3M1 7v1a5 5 0 005 5h1M13 4H6a5 5 0 00-5 5" stroke="#000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span style={{fontSize:14,fontWeight:700,color:'#000'}}>Share</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1514,11 +1865,11 @@ export default function App(){
   const [onboarded,setOnboarded]=React.useState(!!saved?.onboarded);
   const [tw,setTw]=React.useState({...TWEAK_DEFAULTS,...(saved?.tw||{})});
   const [tab,setTab]=React.useState(saved?.tab||'home');
-  const [routines,setRoutines]=React.useState(saved?.routines||DEFAULT_ROUTINES);
+  const [routines,setRoutines]=React.useState(saved?.routines||[]);
   const [historyData,setHistoryData]=React.useState(saved?.historyData||[]);
   const [bwLog,setBwLog]=React.useState(saved?.bwLog||[]);
   const [customExercises,setCustomExercises]=React.useState(saved?.customExercises||[]);
-  const [progressionData,setProgressionData]=React.useState(saved?.progressionData||DEMO_PROGRESSION);
+  const [progressionData,setProgressionData]=React.useState(saved?.progressionData||{});
 
   const [openRoutine,setOpenRoutine]=React.useState(null);
   const [activeWorkout,setActiveWorkout]=React.useState(null);
@@ -1536,14 +1887,17 @@ export default function App(){
   const saveTw=t=>{setTw(t);persist({tw:t});};
   const changeTab=id=>{setTab(id);persist({tab:id});};
 
-  const handleOnboardingComplete=({name,unit,theme})=>{
+  const handleOnboardingComplete=({name,unit,theme,usePresets})=>{
     const newTw={...TWEAK_DEFAULTS,unit,theme,userName:name};
     setTw(newTw);
-    setHistoryData(DEMO_HISTORY);
-    setBwLog(DEMO_BODYWEIGHT);
-    setProgressionData(DEMO_PROGRESSION);
+    // Always start with blank data — no mock history, no fake PRs, no demo bodyweight
+    const startRoutines=usePresets?DEFAULT_ROUTINES:[];
+    setRoutines(startRoutines);
+    setHistoryData([]);
+    setBwLog([]);
+    setProgressionData({});
     setOnboarded(true);
-    persist({onboarded:true,tw:newTw,historyData:DEMO_HISTORY,bwLog:DEMO_BODYWEIGHT,progressionData:DEMO_PROGRESSION,routines:DEFAULT_ROUTINES});
+    persist({onboarded:true,tw:newTw,historyData:[],bwLog:[],progressionData:{},routines:startRoutines});
   };
 
   const handleSaveRoutine=r=>{
@@ -1615,7 +1969,7 @@ export default function App(){
 
         {openRoutine&&<RoutineSheet r={openRoutine} accent={accent} onClose={()=>setOpenRoutine(null)} onStart={r=>{setOpenRoutine(null);setActiveWorkout(r);}} onEdit={r=>{setEditingRoutine(r);}}/>}
 
-        {activeWorkout&&<WorkoutScreen routine={activeWorkout} accent={accent} onEnd={handleWorkoutEnd} restTimerEnabled={tw.restTimerEnabled} restTimerDuration={tw.restTimerDuration} progressionData={progressionData} customExercises={customExercises} historyData={historyData}/>}
+        {activeWorkout&&<WorkoutScreen routine={activeWorkout} accent={accent} onEnd={handleWorkoutEnd} restTimerEnabled={tw.restTimerEnabled} restTimerDuration={tw.restTimerDuration} progressionData={progressionData} customExercises={customExercises} historyData={historyData} onSaveCustomExercise={handleSaveCustomExercise} unit={tw.unit} userName={tw.userName}/>}
 
         {(editingRoutine||creatingRoutine)&&<RoutineBuilder accent={accent} existing={editingRoutine||null} onClose={()=>{setEditingRoutine(null);setCreatingRoutine(false);}} onSave={handleSaveRoutine} onDelete={handleDeleteRoutine} customExercises={customExercises}/>}
 
