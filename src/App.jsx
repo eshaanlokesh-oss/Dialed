@@ -134,7 +134,7 @@ function OnboardingScreen({onComplete}){
         {step===1&&(
           <div style={{animation:'dialIn 0.35s ease'}}>
             <div style={{fontSize:28,fontWeight:800,color:'#fff',letterSpacing:-1,marginBottom:8}}>What's your name?</div>
-            <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:32}}>We'll use this for your greeting.</div>
+            <div style={{marginBottom:32}}/>
             <input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&name.trim())setStep(2);}} placeholder="Your first name" style={{width:'100%',background:'rgba(255,255,255,0.06)',border:`1px solid rgba(${rgb},0.3)`,borderRadius:16,padding:'16px 18px',fontSize:18,fontWeight:600,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif'}}/>
           </div>
         )}
@@ -753,7 +753,8 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
   const [sets,setSets]=React.useState(initSets);
   const [exercises,setExercises]=React.useState(routine.exercises);
 
-  React.useEffect(()=>{const t=setInterval(()=>setElapsed(s=>s+1),1000);return()=>clearInterval(t);},[]);
+  const [finished,setFinished]=React.useState(false);
+  React.useEffect(()=>{if(finished)return;const t=setInterval(()=>setElapsed(s=>s+1),1000);return()=>clearInterval(t);},[finished]);
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const totalSets=sets.reduce((a,ex)=>a+ex.length,0);
   const doneSets=sets.reduce((a,ex)=>a+ex.filter(s=>s.done).length,0);
@@ -782,16 +783,38 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
     setShowAddEx(false);
   };
 
+  const buildCompletedWorkout=()=>{
+    const completedExercises=exercises.map((ex,ei)=>{
+      const doneSetsForEx=(sets[ei]||[]).filter(s=>s.done);
+      const bestWeight=Math.max(...doneSetsForEx.map(s=>parseFloat(s.weight)||0),0);
+      const bestReps=doneSetsForEx.find(s=>parseFloat(s.weight)===bestWeight)?.reps||0;
+      const totalVolume=doneSetsForEx.reduce((a,s)=>(a+(parseFloat(s.weight)||0)*(parseInt(s.reps)||0)),0);
+      const loggedSets=doneSetsForEx.map(s=>({w:parseFloat(s.weight)||0,r:parseInt(s.reps)||0}));
+      return {name:ex.name,sets:loggedSets,bestWeight,bestReps:parseInt(bestReps)||0,totalVolume};
+    });
+    const totalVol=completedExercises.reduce((a,e)=>a+e.totalVolume,0);
+    const totalDoneSets=completedExercises.reduce((a,e)=>a+e.sets.length,0);
+    return {
+      routineName:routine.name,
+      muscles:routine.muscles,
+      duration:fmt(elapsed),
+      volume:Math.round(totalVol),
+      totalSets:totalDoneSets,
+      exercises:completedExercises,
+      notes:workoutNotes,
+    };
+  };
+
   const handleFinish=()=>{
-    // Check if exercises changed vs original routine
     const curNames=exercises.map(e=>e.name);
     const orig=originalExNames.current;
     const changed=JSON.stringify(curNames)!==JSON.stringify(orig);
+    const completed=buildCompletedWorkout();
     if(changed&&routine.id){
-      setPendingSave({exercises,curNames});
+      setPendingSave({exercises,curNames,completed});
       setSaveRoutinePrompt(true);
     } else {
-      onEnd({discard:false});
+      onEnd({discard:false,completedWorkout:completed});
     }
   };
 
@@ -815,7 +838,7 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
             <span style={{fontSize:13,fontWeight:600,color:'#f43f5e'}}>Discard</span>
           </div>
           <div style={{fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.3)'}}>{doneSets}/{totalSets}</div>
-          <div onClick={()=>setFinishConfirm(true)} style={{height:36,padding:'0 18px',borderRadius:12,background:`linear-gradient(135deg,${accent},${THEMES['Crimson']?.p||accent})`,display:'flex',alignItems:'center',cursor:'pointer',boxShadow:`0 4px 16px rgba(${rgb},0.35)`}}>
+          <div onClick={()=>{setFinishConfirm(true);setFinished(true);}} style={{height:36,padding:'0 18px',borderRadius:12,background:`linear-gradient(135deg,${accent},${THEMES['Crimson']?.p||accent})`,display:'flex',alignItems:'center',cursor:'pointer',boxShadow:`0 4px 16px rgba(${rgb},0.35)`}}>
             <span style={{fontSize:14,fontWeight:700,color:'#000'}}>Finish</span>
           </div>
         </div>
@@ -924,7 +947,7 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
       {showPlates&&<PlateCalculator accent={accent} unit={unit||'lbs'} onClose={()=>setShowPlates(false)}/>}
       {showNotes&&<WorkoutNotesSheet accent={accent} notes={workoutNotes} onSave={t=>setWorkoutNotes(t)} onClose={()=>setShowNotes(false)}/>}
       {chartEx&&<ProgressionSheet exerciseName={chartEx} accent={accent} unit="lbs" onClose={()=>setChartEx(null)} progressionData={progressionData||{}}/>}
-      {showShareCard&&<ShareWorkoutCard accent={accent} routine={routine} elapsed={elapsed} doneSets={doneSets} totalSets={totalSets} exercises={exercises} sets={sets} unit={unit||'lbs'} userName={userName} onClose={()=>{setShowShareCard(false);onEnd({discard:false});}}/>}
+      {showShareCard&&<ShareWorkoutCard accent={accent} routine={routine} elapsed={elapsed} doneSets={doneSets} totalSets={totalSets} exercises={exercises} sets={sets} unit={unit||'lbs'} userName={userName} onClose={()=>{const completed=buildCompletedWorkout();setShowShareCard(false);onEnd({discard:false,completedWorkout:completed});}}/>}
 
       {/* Discard confirm — separate from finish flow */}
       {discardConfirm&&(
@@ -973,10 +996,10 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
             <div style={{fontSize:20,fontWeight:700,color:'#fff',marginBottom:8,letterSpacing:-0.5}}>Update routine?</div>
             <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:28,lineHeight:1.5}}>You changed the exercises in "{routine.name}". Save these changes to the routine?</div>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              <div onClick={()=>{setSaveRoutinePrompt(false);onEnd({discard:false,updatedRoutine:{...routine,exercises:pendingSave.exercises}});}} style={{height:54,borderRadius:16,background:`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:`0 6px 24px rgba(${rgb},0.3)`}}>
+              <div onClick={()=>{setSaveRoutinePrompt(false);onEnd({discard:false,updatedRoutine:{...routine,exercises:pendingSave.exercises},completedWorkout:pendingSave.completed});}} style={{height:54,borderRadius:16,background:`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:`0 6px 24px rgba(${rgb},0.3)`}}>
                 <span style={{fontSize:16,fontWeight:700,color:'#000'}}>Update Routine</span>
               </div>
-              <div onClick={()=>{setSaveRoutinePrompt(false);onEnd({discard:false});}} style={{height:54,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+              <div onClick={()=>{setSaveRoutinePrompt(false);onEnd({discard:false,completedWorkout:pendingSave.completed});}} style={{height:54,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
                 <span style={{fontSize:16,fontWeight:600,color:'rgba(255,255,255,0.4)'}}>Just This Once</span>
               </div>
             </div>
@@ -1020,17 +1043,25 @@ function PlateCalculator({accent,unit,onClose}){
   const achievable=effectiveBar+plates.reduce((a,{plate,count})=>a+plate*count*2,0);
   const isExact=targetNum>0&&Math.abs(achievable-targetNum)<0.01;
 
-  // Visual bar
-  const BAR_H=48; const BAR_W=320;
+  // Visual bar — single side: sleeve + bar + plates stacking left to right, centered
+  const SLEEVE_W=40; const BAR_STUB=80; const PLATE_GAP=3;
   const plateRects=[];
-  let xOff=BAR_W/2+60;
+  let totalPlateW=0;
   plates.forEach(({plate,count})=>{
-    const pw=Math.max(18,plate*0.7); const ph=Math.min(80,28+plate*0.8);
+    const pw=Math.max(20,plate*0.75);
+    totalPlateW+=pw*count+PLATE_GAP*count;
+  });
+  // Build plate rects starting after sleeve+bar
+  let px2=SLEEVE_W+BAR_STUB;
+  plates.forEach(({plate,count})=>{
+    const pw=Math.max(20,plate*0.75); const ph=Math.min(80,26+plate*0.9);
     for(let i=0;i<count;i++){
-      plateRects.push({x:xOff,w:pw,h:ph,color:PLATE_COLORS[plate]||'#94a3b8',label:plate});
-      xOff+=pw+3;
+      plateRects.push({x:px2,w:pw,h:ph,color:PLATE_COLORS[plate]||'#94a3b8',label:plate});
+      px2+=pw+PLATE_GAP;
     }
   });
+  const totalSvgW=SLEEVE_W+BAR_STUB+totalPlateW+20;
+  const BAR_H=56;
 
   return(
     <div style={{position:'absolute',inset:0,zIndex:500,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
@@ -1066,38 +1097,27 @@ function PlateCalculator({accent,unit,onClose}){
           {/* Visual bar diagram */}
           {targetNum>0&&(
             <div style={{marginBottom:20,background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,padding:'20px 16px',overflowX:'auto'}}>
-              <div style={{minWidth:BAR_W,position:'relative',height:BAR_H+40}}>
-                <svg width={Math.max(BAR_W, xOff+20)} height={BAR_H+40} style={{display:'block',margin:'0 auto'}}>
-                  {/* Left sleeve */}
-                  <rect x={0} y={BAR_H/2-4} width={60} height={8} rx={4} fill="#444"/>
-                  {/* Bar */}
-                  <rect x={60} y={BAR_H/2-3} width={BAR_W/2-60} height={6} rx={3} fill="#333"/>
-                  {/* Bar label */}
-                  <text x={30} y={BAR_H/2+5} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="10" fontFamily="Outfit,sans-serif" fontWeight="600">{effectiveBar}</text>
-                  {/* Plates right side */}
-                  {plateRects.map((p,i)=>{
-                    const py=(BAR_H-p.h)/2;
-                    return(
-                      <g key={i}>
-                        <rect x={p.x} y={py} width={p.w} height={p.h} rx={4} fill={p.color} opacity="0.9"/>
-                        {p.w>16&&<text x={p.x+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
-                      </g>
-                    );
-                  })}
-                  {/* Mirror left side plates (reversed) */}
-                  {[...plateRects].reverse().map((p,i)=>{
-                    const mirrorX=BAR_W/2+60-1-((plateRects.length-1-i<plateRects.length)?plateRects.slice(0,plateRects.length-1-i).reduce((a,pp)=>a+pp.w+3,0)+p.w:0);
-                    const adjustedX=BAR_W/2-(xOff-BAR_W/2-60)-p.w+plateRects.slice(0,plateRects.length-1-i).reduce((a,pp)=>a+pp.w+3,0);
-                    const py=(BAR_H-p.h)/2;
-                    return(
-                      <g key={`l${i}`}>
-                        <rect x={adjustedX} y={py} width={p.w} height={p.h} rx={4} fill={p.color} opacity="0.9"/>
-                        {p.w>16&&<text x={adjustedX+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
+              <svg width={Math.max(totalSvgW,200)} height={BAR_H+16} style={{display:'block',margin:'0 auto',overflow:'visible'}}>
+                {/* Collar/sleeve end cap */}
+                <rect x={0} y={BAR_H/2-7} width={SLEEVE_W} height={14} rx={4} fill="#555"/>
+                <text x={SLEEVE_W/2} y={BAR_H/2+4} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="700">{effectiveBar}</text>
+                {/* Bar shaft */}
+                <rect x={SLEEVE_W} y={BAR_H/2-3} width={BAR_STUB} height={6} rx={3} fill="#333"/>
+                {/* Plates */}
+                {plateRects.map((p,i)=>{
+                  const py=(BAR_H-p.h)/2;
+                  return(
+                    <g key={i}>
+                      <rect x={p.x} y={py} width={p.w} height={p.h} rx={4} fill={p.color} opacity="0.92"/>
+                      {p.w>=20&&<text x={p.x+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
+                    </g>
+                  );
+                })}
+                {/* Date labels */}
+                {plateRects.length===0&&(
+                  <text x={SLEEVE_W+BAR_STUB/2} y={BAR_H+12} textAnchor="middle" fill="rgba(255,255,255,0.2)" fontSize="10" fontFamily="Outfit,sans-serif">Bar only</text>
+                )}
+              </svg>
             </div>
           )}
 
@@ -1400,12 +1420,12 @@ function HomeScreen({accent,unit,userName,historyData,muscleSets,weekChart,routi
 
         {/* Action tiles */}
         <div style={{display:'flex',gap:10,marginBottom:26}}>
-          <div onClick={onStartPlan} style={{flex:'1 1 auto',padding:'18px 16px 20px',borderRadius:22,background:`linear-gradient(160deg,rgba(${rgb},0.24) 0%,rgba(${rgb},0.07) 100%)`,border:`1px solid rgba(${rgb},0.22)`,position:'relative',overflow:'hidden',cursor:'pointer',boxShadow:`0 -1px 0 rgba(${rgb},0.75) inset`}}>
+          <div onClick={onStartPlan} style={{flex:'1 1 auto',padding:'18px 16px 20px',borderRadius:22,background:`linear-gradient(160deg,rgba(${rgb},0.24) 0%,rgba(${rgb},0.07) 100%)`,border:`1px solid rgba(${rgb},0.22)`,position:'relative',overflow:'hidden',cursor:routines.length>0?'pointer':'default',boxShadow:`0 -1px 0 rgba(${rgb},0.75) inset`}}>
             <div style={{position:'absolute',top:-36,left:'50%',transform:'translateX(-50%)',width:110,height:55,borderRadius:'50%',background:`rgba(${rgb},0.38)`,filter:'blur(30px)',pointerEvents:'none'}}/>
             <div style={{position:'relative',zIndex:1}}>
               <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:3,letterSpacing:-0.3}}>Today's Plan</div>
-              <div style={{fontSize:11.5,color:'rgba(255,255,255,0.42)',marginBottom:15}}>Push A · 6 exercises</div>
-              <div style={{display:'inline-flex',alignItems:'center',background:`rgba(${rgb},0.2)`,border:`1px solid rgba(${rgb},0.32)`,borderRadius:20,padding:'5px 13px',fontSize:12,fontWeight:700,color:accent}}>Start →</div>
+              <div style={{fontSize:11.5,color:'rgba(255,255,255,0.42)',marginBottom:15}}>{routines.length>0?`${routines[0].name} · ${routines[0].exercises.length} exercises`:'No routines yet'}</div>
+              {routines.length>0&&<div style={{display:'inline-flex',alignItems:'center',background:`rgba(${rgb},0.2)`,border:`1px solid rgba(${rgb},0.32)`,borderRadius:20,padding:'5px 13px',fontSize:12,fontWeight:700,color:accent}}>Start →</div>}
             </div>
           </div>
           <div onClick={onQuickStart} style={{flex:'0 0 42%',padding:'16px 14px 18px',borderRadius:22,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.065)',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
@@ -1580,7 +1600,7 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
 }
 
 // ─── Calendar Screen ──────────────────────────────────────────
-function CalendarScreen({accent,calWorkouts}){
+function CalendarScreen({accent,calWorkouts,routines}){
   const rgb=h2r(accent);
   const today=new Date(2026,3,19);
   const [curYear,setCurYear]=React.useState(2026);const [curMonth,setCurMonth]=React.useState(3);
@@ -1597,7 +1617,7 @@ function CalendarScreen({accent,calWorkouts}){
   const selW=selected&&allW[selected];
   const monthKeys=Object.keys(allW).filter(k=>k.startsWith(`${curYear}-${String(curMonth+1).padStart(2,'0')}`));
   const streak=React.useMemo(()=>{let c=0;const d=new Date(today);while(true){const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;if(allW[k]){c++;d.setDate(d.getDate()-1);}else break;}return c;},[allW]);
-  const allRoutinesForPlan=[...DEFAULT_ROUTINES,{id:'rest',name:'Rest Day',muscles:['Full Body'],exercises:[],isRest:true}];
+  const allRoutinesForPlan=[...(routines||[]),{id:'rest',name:'Rest Day',muscles:['Full Body'],exercises:[],isRest:true}];
   return(
     <div style={{height:'100%',display:'flex',flexDirection:'column',paddingTop:58,paddingBottom:82,position:'relative'}}>
       <div style={{padding:'10px 20px 10px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -1784,7 +1804,7 @@ function AwardsScreen({accent,prsData}){
 }
 
 // ─── Settings Screen ──────────────────────────────────────────
-function SettingsScreen({accent,tw,onTwChange}){
+function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
   const rgb=h2r(accent);
   const Toggle=({value,onChange})=>{const r2=h2r(accent);return <div onClick={()=>onChange(!value)} style={{width:44,height:26,borderRadius:13,flexShrink:0,background:value?`rgba(${r2},0.9)`:'rgba(255,255,255,0.1)',border:value?`1px solid rgba(${r2},1)`:'1px solid rgba(255,255,255,0.12)',position:'relative',cursor:'pointer',transition:'all 0.2s'}}><div style={{width:20,height:20,borderRadius:10,background:'#fff',position:'absolute',top:2,left:value?21:2,transition:'left 0.2s cubic-bezier(0.34,1.56,0.64,1)',boxShadow:'0 1px 4px rgba(0,0,0,0.3)'}}/></div>;};
   const Row=({label,sub,children,last})=>(
@@ -1801,7 +1821,7 @@ function SettingsScreen({accent,tw,onTwChange}){
         <div style={{marginBottom:24}}><div style={{fontSize:32,fontWeight:700,color:'#fff',letterSpacing:-0.5,marginBottom:4}}>Settings</div><div style={{fontSize:13,color:'rgba(255,255,255,0.3)'}}>Customize your experience</div></div>
         <div style={{borderRadius:22,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',padding:'16px 18px',marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
           <div style={{width:52,height:52,borderRadius:18,flexShrink:0,background:`linear-gradient(145deg,rgba(${rgb},0.3),rgba(${rgb},0.1))`,border:`1px solid rgba(${rgb},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:accent}}>{(tw.userName||'A')[0].toUpperCase()}</div>
-          <div><div style={{fontSize:16,fontWeight:700,color:'#fff',marginBottom:2}}>{tw.userName||'Athlete'}</div><div style={{fontSize:12,color:'rgba(255,255,255,0.3)'}}>47 workouts · 5-day streak</div></div>
+          <div><div style={{fontSize:16,fontWeight:700,color:'#fff',marginBottom:2}}>{tw.userName||'Athlete'}</div><div style={{fontSize:12,color:'rgba(255,255,255,0.3)'}}>{workoutCount} workout{workoutCount!==1?'s':''} · {streak} day streak</div></div>
         </div>
         <div style={{marginBottom:16}}><Lbl>Appearance</Lbl>
           <div style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,overflow:'hidden'}}>
@@ -1825,13 +1845,14 @@ function SettingsScreen({accent,tw,onTwChange}){
                 {['lbs','kg'].map(u=><div key={u} onClick={()=>onTwChange({...tw,unit:u})} style={{padding:'6px 16px',background:tw.unit===u?`rgba(${rgb},0.2)`:'transparent',color:tw.unit===u?accent:'rgba(255,255,255,0.35)',fontSize:13,fontWeight:700,cursor:'pointer',borderRight:u==='lbs'?'1px solid rgba(255,255,255,0.07)':'none'}}>{u}</div>)}
               </div>
             </Row>
-            <Row label="Rest Timer" sub="Auto-start after set completion"><Toggle value={tw.restTimerEnabled} onChange={v=>onTwChange({...tw,restTimerEnabled:v})}/></Row>
+            <Row label="Rest Timer" sub="Auto-start after set completion" last={!tw.restTimerEnabled}><Toggle value={tw.restTimerEnabled} onChange={v=>onTwChange({...tw,restTimerEnabled:v})}/></Row>
             {tw.restTimerEnabled&&(
-              <Row label="Rest Duration" sub="Seconds between sets" last>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
-                  {timerOptions.map(s=>{const sel=tw.restTimerDuration===s;const sr=h2r(accent);return <div key={s} onClick={()=>onTwChange({...tw,restTimerDuration:s})} style={{padding:'4px 10px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${sr},0.2)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${sr},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:12,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)',transition:'all 0.15s'}}>{s}s</div>;})}
+              <div style={{padding:'10px 18px 14px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
+                <div style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.5)',marginBottom:10}}>Rest Duration</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {timerOptions.map(s=>{const sel=tw.restTimerDuration===s;const sr=h2r(accent);return <div key={s} onClick={()=>onTwChange({...tw,restTimerDuration:s})} style={{padding:'6px 14px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${sr},0.2)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${sr},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)',transition:'all 0.15s'}}>{s}s</div>;})}
                 </div>
-              </Row>
+              </div>
             )}
           </div>
         </div>
@@ -1912,11 +1933,46 @@ export default function App(){
     setEditingRoutine(null);
   };
 
-  const handleWorkoutEnd=({discard,updatedRoutine})=>{
-    if(updatedRoutine){
-      const updated=routines.map(r=>r.id===updatedRoutine.id?updatedRoutine:r);
-      setRoutines(updated);
-      persist({routines:updated});
+  const handleWorkoutEnd=({discard,updatedRoutine,completedWorkout})=>{
+    if(!discard && completedWorkout){
+      const newEntry={
+        id:`h${Date.now()}`,
+        date: new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
+        dateISO: new Date().toISOString().split('T')[0],
+        routine: completedWorkout.routineName,
+        muscles: completedWorkout.muscles,
+        duration: completedWorkout.duration,
+        volume: completedWorkout.volume,
+        sets: completedWorkout.totalSets,
+        exercises: completedWorkout.exercises,
+      };
+      const updatedHistory=[newEntry,...historyData];
+      setHistoryData(updatedHistory);
+      // Update progression data
+      const newProgression={...progressionData};
+      completedWorkout.exercises.forEach(ex=>{
+        if(ex.bestWeight>0&&ex.bestReps>0){
+          if(!newProgression[ex.name]) newProgression[ex.name]=[];
+          newProgression[ex.name]=[...newProgression[ex.name],{
+            date:new Date().toISOString().split('T')[0],
+            weight:ex.bestWeight,
+            reps:ex.bestReps,
+            volume:ex.totalVolume,
+          }];
+        }
+      });
+      setProgressionData(newProgression);
+      if(updatedRoutine){
+        const updatedR=routines.map(r=>r.id===updatedRoutine.id?updatedRoutine:r);
+        setRoutines(updatedR);
+        persist({historyData:updatedHistory,progressionData:newProgression,routines:updatedR});
+      } else {
+        persist({historyData:updatedHistory,progressionData:newProgression});
+      }
+    } else if(updatedRoutine){
+      const updatedR=routines.map(r=>r.id===updatedRoutine.id?updatedRoutine:r);
+      setRoutines(updatedR);
+      persist({routines:updatedR});
     }
     setActiveWorkout(null);
   };
@@ -2053,7 +2109,18 @@ export default function App(){
     return prs;
   }, [historyData]);
 
-  if(!onboarded){
+  const currentStreak = React.useMemo(() => {
+    if(!historyData.length) return 0;
+    const dateSet = new Set(historyData.map(s => s.dateISO || s.date?.replace(/^Today,\s*/i, new Date().toISOString().split('T')[0]).replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'')));
+    let count = 0;
+    const d = new Date();
+    while(true){
+      const key = d.toISOString().split('T')[0];
+      if(dateSet.has(key)){ count++; d.setDate(d.getDate()-1); }
+      else break;
+    }
+    return count;
+  }, [historyData]);
     return(
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}>
         <PhoneFrame>
@@ -2075,9 +2142,9 @@ export default function App(){
 
         {tab==='home'&&<HomeScreen accent={accent} unit={tw.unit} userName={tw.userName} historyData={historyData} muscleSets={muscleSets} weekChart={weekChart} routines={routines} onRoutineTap={r=>setOpenRoutine(r)} onStartPlan={()=>setActiveWorkout(routines[0])} onQuickStart={()=>setActiveWorkout({name:'Free Workout',muscles:['Full Body'],exercises:[],id:null})} onOpenBW={()=>setShowBWChart(true)} bwLog={bwLog} onNewRoutine={()=>setCreatingRoutine(true)}/>}
         {tab==='history'&&<HistoryScreen accent={accent} historyData={historyData} historyWeeks={historyWeeks} progressionData={progressionData} unit={tw.unit}/>}
-        {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts}/>}
+        {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines}/>}
         {tab==='awards'&&<AwardsScreen accent={accent} prsData={prsData}/>}
-        {tab==='settings'&&<SettingsScreen accent={accent} tw={tw} onTwChange={saveTw}/>}
+        {tab==='settings'&&<SettingsScreen accent={accent} tw={tw} onTwChange={saveTw} workoutCount={historyData.length} streak={currentStreak}/>}
 
         {openRoutine&&<RoutineSheet r={openRoutine} accent={accent} onClose={()=>setOpenRoutine(null)} onStart={r=>{setOpenRoutine(null);setActiveWorkout(r);}} onEdit={r=>{setEditingRoutine(r);}}/>}
 
