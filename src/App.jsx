@@ -1859,7 +1859,7 @@ function SettingsScreen({accent,tw,onTwChange}){
 
 // ─── App Root ─────────────────────────────────────────────────
 export default function App(){
-  const loadState=()=>{try{return JSON.parse(localStorage.getItem('dialed_v3')||'null');}catch(e){return null;}};
+  const loadState=()=>{try{return JSON.parse(localStorage.getItem('dialed_v4')||'null');}catch(e){return null;}};
   const saved=loadState();
 
   const [onboarded,setOnboarded]=React.useState(!!saved?.onboarded);
@@ -1881,7 +1881,7 @@ export default function App(){
 
   const persist=(updates={})=>{
     const state={onboarded:true,tw,tab,routines,historyData,bwLog,customExercises,progressionData,...updates};
-    localStorage.setItem('dialed_v3',JSON.stringify(state));
+    localStorage.setItem('dialed_v4',JSON.stringify(state));
   };
 
   const saveTw=t=>{setTw(t);persist({tw:t});};
