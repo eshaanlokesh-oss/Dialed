@@ -2142,6 +2142,8 @@ export default function App(){
     }
     return count;
   }, [historyData]);
+
+  if(!onboarded){
     return(
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}>
         <PhoneFrame>
