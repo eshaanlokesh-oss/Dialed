@@ -1054,7 +1054,7 @@ function PlateCalculator({accent,unit,onClose}){
   const oneSideW=sidePlates.reduce((a,p)=>a+p.w+PLATE_GAP,0);
   const totalSvgW=Math.max(oneSideW*2+COLLAR_W*2+BAR_SHAFT_W+40,200);
   const BAR_H=60;
-  const cx=totalSvgW/2;
+  const cx=totalSvgW/2-16;
   // Right side plates (from collar outward right)
   let rx=cx+BAR_SHAFT_W/2+COLLAR_W;
   const rightPlates=sidePlates.map(p=>{const x=rx;rx+=p.w+PLATE_GAP;return {...p,x};});
@@ -1376,7 +1376,7 @@ function BodyweightCard({accent,unit,bwLog,onOpenChart}){
 }
 
 // ─── Home Screen ──────────────────────────────────────────────
-function HomeScreen({accent,unit,userName,historyData,muscleSets,weekChart,routines,onRoutineTap,onStartPlan,onQuickStart,onOpenBW,bwLog,onNewRoutine}){
+function HomeScreen({accent,unit,userName,historyData,muscleSets,weekChart,routines,onRoutineTap,onStartPlan,onQuickStart,onOpenBW,bwLog,onNewRoutine,todaySchedule}){
   const rgb=h2r(accent);
   const hr=new Date().getHours();
   const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
@@ -1428,8 +1428,10 @@ function HomeScreen({accent,unit,userName,historyData,muscleSets,weekChart,routi
             <div style={{position:'absolute',top:-36,left:'50%',transform:'translateX(-50%)',width:110,height:55,borderRadius:'50%',background:`rgba(${rgb},0.38)`,filter:'blur(30px)',pointerEvents:'none'}}/>
             <div style={{position:'relative',zIndex:1}}>
               <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:3,letterSpacing:-0.3}}>Today's Plan</div>
-              <div style={{fontSize:11.5,color:'rgba(255,255,255,0.42)',marginBottom:15}}>{routines.length>0?`${routines[0].name} · ${routines[0].exercises.length} exercises`:'No routines yet'}</div>
-              {routines.length>0&&<div style={{display:'inline-flex',alignItems:'center',background:`rgba(${rgb},0.2)`,border:`1px solid rgba(${rgb},0.32)`,borderRadius:20,padding:'5px 13px',fontSize:12,fontWeight:700,color:accent}}>Start →</div>}
+              <div style={{fontSize:11.5,color:'rgba(255,255,255,0.42)',marginBottom:15}}>
+                {todaySchedule?`${todaySchedule.routineName}${todaySchedule.time?' · '+todaySchedule.time:''}`:routines.length>0?`${routines[0].name} · ${routines[0].exercises.length} ex`:'No routines yet'}
+              </div>
+              {(todaySchedule||routines.length>0)&&<div style={{display:'inline-flex',alignItems:'center',background:`rgba(${rgb},0.2)`,border:`1px solid rgba(${rgb},0.32)`,borderRadius:20,padding:'5px 13px',fontSize:12,fontWeight:700,color:accent}}>Start →</div>}
             </div>
           </div>
           <div onClick={onQuickStart} style={{flex:'0 0 42%',padding:'16px 14px 18px',borderRadius:22,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.065)',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
@@ -1605,13 +1607,129 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
   );
 }
 
+// ─── Schedule Builder ─────────────────────────────────────────
+function ScheduleBuilder({accent,routines,schedules=[],existing,onSave,onDelete,onClose}){
+  const rgb=h2r(accent);
+  const DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const allRoutinesForPlan=[...(routines||[]),{id:'rest',name:'Rest Day',muscles:['Full Body'],exercises:[],isRest:true}];
+  const [tab,setTab]=React.useState('routine'); // 'routine' | 'time'
+  const [selectedRoutine,setSelectedRoutine]=React.useState(existing?(existing.isRest?{id:'rest',name:'Rest Day',muscles:['Full Body'],exercises:[],isRest:true}:routines.find(r=>r.name===existing.routineName)||routines[0]):null);
+  const [selectedDays,setSelectedDays]=React.useState(existing?.days||[]);
+  const [time,setTime]=React.useState(existing?.time||'07:00');
+  const [useTime,setUseTime]=React.useState(!!(existing?.time));
+  const toggleDay=d=>setSelectedDays(p=>p.includes(d)?p.filter(x=>x!==d):[...p,d].sort((a,b)=>a-b));
+  const canSave=selectedRoutine&&selectedDays.length>0;
+  const handleSave=()=>{
+    if(!canSave)return;
+    const sched={
+      id:existing?.id||uid(),
+      routineName:selectedRoutine.name,
+      muscles:selectedRoutine.muscles,
+      isRest:selectedRoutine.isRest||false,
+      days:selectedDays,
+      time:useTime?time:null,
+    };
+    onSave(sched);
+  };
+  return(
+    <div style={{position:'absolute',inset:0,zIndex:600,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.8)',backdropFilter:'blur(10px)'}}>
+      <div style={{width:'100%',background:'#131313',borderRadius:'28px 28px 0 0',border:'1px solid rgba(255,255,255,0.09)',borderBottom:'none',maxHeight:'88%',display:'flex',flexDirection:'column',animation:'slideUp 0.3s cubic-bezier(0.32,0.72,0,1)'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'12px 0 0'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)'}}/></div>
+        {/* Header */}
+        <div style={{padding:'14px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{fontSize:20,fontWeight:700,color:'#fff',letterSpacing:-0.5}}>{existing?'Edit Schedule':'New Schedule'}</div>
+          <div style={{display:'flex',gap:8}}>
+            {existing&&onDelete&&(
+              <div onClick={onDelete} style={{height:32,padding:'0 14px',borderRadius:10,background:'rgba(244,63,94,0.1)',border:'1px solid rgba(244,63,94,0.2)',display:'flex',alignItems:'center',cursor:'pointer'}}>
+                <span style={{fontSize:13,fontWeight:700,color:'#f43f5e'}}>Delete</span>
+              </div>
+            )}
+            <div onClick={onClose} style={{cursor:'pointer',opacity:0.35,padding:'6px'}}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg></div>
+          </div>
+        </div>
+        {/* Tabs */}
+        <div style={{display:'flex',gap:6,padding:'14px 20px 0'}}>
+          {[['routine','Routine & Days'],['time','Time']].map(([k,label])=>{const sel=tab===k;return(
+            <div key={k} onClick={()=>setTab(k)} style={{padding:'7px 18px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${rgb},0.18)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${rgb},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)',transition:'all 0.15s'}}>{label}</div>
+          );})}
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'18px 20px 0'}}>
+          {tab==='routine'&&(
+            <>
+              <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:12}}>Choose Routine</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:22}}>
+                {allRoutinesForPlan.map(r=>{
+                  const sel=selectedRoutine?.name===r.name;
+                  const pc=r.isRest?'#94a3b8':(MC[r.muscles?.[0]]||accent);const pcr=h2r(pc);
+                  return(
+                    <div key={r.id||r.name} onClick={()=>setSelectedRoutine(r)} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 14px',background:sel?`rgba(${pcr},0.1)`:'rgba(255,255,255,0.03)',border:sel?`1px solid rgba(${pcr},0.3)`:'1px solid rgba(255,255,255,0.06)',borderRadius:16,cursor:'pointer',transition:'all 0.15s'}}>
+                      <div style={{width:38,height:38,borderRadius:12,background:r.isRest?'rgba(148,163,184,0.12)':`rgba(${pcr},0.15)`,border:`1px solid rgba(${pcr},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:r.isRest?18:13,fontWeight:700,color:pc,flexShrink:0}}>{r.isRest?'😴':r.name[0]}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:14,fontWeight:700,color:sel?'#fff':'rgba(255,255,255,0.8)',marginBottom:2}}>{r.name}</div>
+                        {r.isRest?<div style={{fontSize:11,color:'rgba(255,255,255,0.3)'}}>Recovery day</div>:(
+                          <div style={{display:'flex',gap:4}}>{(r.muscles||[]).slice(0,3).map((m,mi)=>(<React.Fragment key={m}>{mi>0&&<span style={{color:'rgba(255,255,255,0.2)',fontSize:10}}>·</span>}<span style={{fontSize:11,color:MC[m],fontWeight:500}}>{m}</span></React.Fragment>))}</div>
+                        )}
+                      </div>
+                      {sel&&<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-7" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:12}}>Repeat On</div>
+              <div style={{display:'flex',gap:7,marginBottom:8}}>
+                {DAY_NAMES.map((d,i)=>{const sel=selectedDays.includes(i);return(
+                  <div key={i} onClick={()=>toggleDay(i)} style={{flex:1,height:46,borderRadius:13,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,cursor:'pointer',background:sel?`rgba(${rgb},0.2)`:'rgba(255,255,255,0.04)',border:sel?`1px solid rgba(${rgb},0.4)`:'1px solid rgba(255,255,255,0.07)',transition:'all 0.15s'}}>
+                    <span style={{fontSize:11,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)'}}>{d[0]}</span>
+                  </div>
+                );})}
+              </div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.2)',marginBottom:24,textAlign:'center'}}>{selectedDays.length===0?'Tap days to select':selectedDays.map(d=>DAY_NAMES[d]).join(', ')}</div>
+            </>
+          )}
+          {tab==='time'&&(
+            <>
+              <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:12}}>Reminder Time</div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:16,marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600,color:'rgba(255,255,255,0.85)'}}>Set a time</div>
+                  <div style={{fontSize:11.5,color:'rgba(255,255,255,0.3)',marginTop:2}}>Get a reminder before your session</div>
+                </div>
+                <div onClick={()=>setUseTime(v=>!v)} style={{width:44,height:26,borderRadius:13,flexShrink:0,background:useTime?`rgba(${rgb},0.9)`:'rgba(255,255,255,0.1)',border:useTime?`1px solid rgba(${rgb},1)`:'1px solid rgba(255,255,255,0.12)',position:'relative',cursor:'pointer',transition:'all 0.2s'}}>
+                  <div style={{width:20,height:20,borderRadius:10,background:'#fff',position:'absolute',top:2,left:useTime?21:2,transition:'left 0.2s cubic-bezier(0.34,1.56,0.64,1)',boxShadow:'0 1px 4px rgba(0,0,0,0.3)'}}/>
+                </div>
+              </div>
+              {useTime&&(
+                <div style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:16,padding:'20px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{background:'none',border:'none',outline:'none',fontSize:36,fontWeight:700,color:'#fff',fontFamily:'Outfit,sans-serif',letterSpacing:-1,cursor:'pointer'}}/>
+                </div>
+              )}
+              {!useTime&&(
+                <div style={{padding:'32px 20px',textAlign:'center'}}>
+                  <div style={{fontSize:32,marginBottom:12}}>⏰</div>
+                  <div style={{fontSize:14,color:'rgba(255,255,255,0.3)',lineHeight:1.6}}>Toggle on to add a reminder time for this recurring schedule.</div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {/* Save button */}
+        <div style={{padding:'16px 20px 40px',flexShrink:0}}>
+          <div onClick={handleSave} style={{height:54,borderRadius:18,background:canSave?`linear-gradient(135deg,${accent},${THEMES['Emerald']?.g||accent})`:'rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center',cursor:canSave?'pointer':'default',transition:'all 0.2s',boxShadow:canSave?`0 8px 28px rgba(${rgb},0.35)`:'none'}}>
+            <span style={{fontSize:16,fontWeight:700,color:canSave?'#000':'rgba(255,255,255,0.2)'}}>{existing?'Save Changes':'Create Schedule'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Calendar Screen ──────────────────────────────────────────
-function CalendarScreen({accent,calWorkouts,routines}){
+function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule,onDeleteSchedule}){
   const rgb=h2r(accent);
   const today=new Date(2026,3,19);
   const [curYear,setCurYear]=React.useState(2026);const [curMonth,setCurMonth]=React.useState(3);
   const [selected,setSelected]=React.useState(null);const [planDay,setPlanDay]=React.useState(null);
-  const [planned,setPlanned]=React.useState({});const [showSched,setShowSched]=React.useState(false);
+  const [planned,setPlanned]=React.useState({});const [showSched,setShowSched]=React.useState(false);const [editingSchedule,setEditingSchedule]=React.useState(null);
   const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DAYS=['S','M','T','W','T','F','S'];
   const firstDay=new Date(curYear,curMonth,1).getDay();const daysInMonth=new Date(curYear,curMonth+1,0).getDate();
@@ -1619,7 +1737,25 @@ function CalendarScreen({accent,calWorkouts,routines}){
   const keyFor=d=>d?`${curYear}-${String(curMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`:null;
   const isToday=d=>d===today.getDate()&&curMonth===today.getMonth()&&curYear===today.getFullYear();
   const isFuture=d=>{if(!d)return false;return new Date(curYear,curMonth,d)>today;};
-  const allW={...calWorkouts,...planned};
+  // Build schedule-generated planned days for current month view
+  const schedulePlanned = React.useMemo(()=>{
+    const map={};
+    schedules.forEach(sched=>{
+      // Generate occurrences for +-2 months around current view
+      const start=new Date(curYear,curMonth-1,1);
+      const end=new Date(curYear,curMonth+2,0);
+      const d=new Date(start);
+      while(d<=end){
+        if(sched.days.includes(d.getDay())){
+          const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          map[key]={routine:sched.routineName,muscles:sched.muscles,volume:0,sets:0,planned:true,isRest:sched.isRest,scheduleId:sched.id,time:sched.time};
+        }
+        d.setDate(d.getDate()+1);
+      }
+    });
+    return map;
+  },[schedules,curYear,curMonth]);
+  const allW={...schedulePlanned,...calWorkouts,...planned};
   const selW=selected&&allW[selected];
   const monthKeys=Object.keys(allW).filter(k=>k.startsWith(`${curYear}-${String(curMonth+1).padStart(2,'0')}`));
   const streak=React.useMemo(()=>{let c=0;const d=new Date(today);while(true){const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;if(allW[k]){c++;d.setDate(d.getDate()-1);}else break;}return c;},[allW]);
@@ -1651,7 +1787,7 @@ function CalendarScreen({accent,calWorkouts,routines}){
           const key=keyFor(d);const w=key&&allW[key];const today_=isToday(d);const isSel=key&&key===selected;const future=isFuture(d);
           const isRest=w?.isRest;const pc=w?(isRest?'#94a3b8':(MC[w.muscles?.[0]]||accent)):null;
           return(
-            <div key={i} onClick={()=>{if(!d)return;if(w)setSelected(key);else if(future){setPlanDay(key);setSelected(null);}}} style={{height:52,borderRadius:13,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,cursor:d?'pointer':'default',background:isSel?`rgba(${rgb},0.18)`:today_?'rgba(255,255,255,0.07)':future&&!w?'rgba(255,255,255,0.02)':'transparent',border:isSel?`1px solid rgba(${rgb},0.35)`:today_?'1px solid rgba(255,255,255,0.1)':future?'1px dashed rgba(255,255,255,0.06)':'1px solid transparent',transition:'all 0.13s'}}>
+            <div key={i} onClick={()=>{if(!d)return;if(w){setSelected(key);}else if(future||isToday(d)){setPlanDay(key);setSelected(null);}}} style={{height:52,borderRadius:13,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,cursor:d?'pointer':'default',background:isSel?`rgba(${rgb},0.18)`:today_?'rgba(255,255,255,0.07)':future&&!w?'rgba(255,255,255,0.02)':'transparent',border:isSel?`1px solid rgba(${rgb},0.35)`:today_?'1px solid rgba(255,255,255,0.1)':future?'1px dashed rgba(255,255,255,0.06)':'1px solid transparent',transition:'all 0.13s'}}>
               {d&&<>
                 <span style={{fontSize:15,fontWeight:today_||isSel?700:w?500:400,color:isSel?accent:today_?'#fff':w?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.22)',lineHeight:1}}>{d}</span>
                 {w?<div style={{width:5,height:5,borderRadius:3,background:isSel?accent:pc,opacity:isSel?1:0.7}}/>:future?<div style={{width:5,height:5,borderRadius:3,background:'rgba(255,255,255,0.08)'}}/>:null}
@@ -1674,15 +1810,26 @@ function CalendarScreen({accent,calWorkouts,routines}){
       {selW&&(
         <div style={{margin:'10px 10px 0',background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:18,padding:'14px',flex:1,overflowY:'auto',flexShrink:0}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
-            <div>
+            <div style={{flex:1}}>
               <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:4}}>
                 <span style={{fontSize:16,fontWeight:700,color:'#fff'}}>{selW.routine}</span>
                 {selW.pr&&<span style={{fontSize:9,fontWeight:800,color:accent,background:`rgba(${rgb},0.14)`,border:`1px solid rgba(${rgb},0.25)`,borderRadius:20,padding:'2px 7px'}}>PR</span>}
                 {selW.isRest&&<span style={{fontSize:9,fontWeight:700,color:'#94a3b8',background:'rgba(148,163,184,0.1)',borderRadius:20,padding:'2px 7px'}}>REST</span>}
+                {selW.planned&&<span style={{fontSize:9,fontWeight:700,color:'rgba(255,255,255,0.4)',background:'rgba(255,255,255,0.06)',borderRadius:20,padding:'2px 7px'}}>SCHEDULED</span>}
               </div>
-              <div style={{display:'flex',gap:5}}>{(selW.muscles||[]).map((m,mi)=>(<React.Fragment key={m}>{mi>0&&<div style={{width:3,height:3,borderRadius:2,background:'rgba(255,255,255,0.12)',marginTop:6}}/>}<span style={{fontSize:11.5,color:MC[m]||'#94a3b8',fontWeight:500}}>{m}</span></React.Fragment>))}</div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+                {(selW.muscles||[]).map((m,mi)=>(<React.Fragment key={m}>{mi>0&&<div style={{width:3,height:3,borderRadius:2,background:'rgba(255,255,255,0.12)',marginTop:0}}/>}<span style={{fontSize:11.5,color:MC[m]||'#94a3b8',fontWeight:500}}>{m}</span></React.Fragment>))}
+                {selW.time&&<span style={{fontSize:11,color:'rgba(255,255,255,0.3)',marginLeft:4}}>· {selW.time}</span>}
+              </div>
             </div>
-            {selW.duration&&<div style={{fontSize:12,color:'rgba(255,255,255,0.4)'}}>{selW.duration}</div>}
+            <div style={{display:'flex',gap:6,flexShrink:0}}>
+              {selW.scheduleId&&(
+                <div onClick={()=>{const s=schedules.find(x=>x.id===selW.scheduleId);if(s)setEditingSchedule(s);}} style={{height:30,padding:'0 12px',borderRadius:10,background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.25)`,display:'flex',alignItems:'center',cursor:'pointer'}}>
+                  <span style={{fontSize:12,fontWeight:700,color:accent}}>Edit</span>
+                </div>
+              )}
+              {selW.duration&&<div style={{fontSize:12,color:'rgba(255,255,255,0.4)',display:'flex',alignItems:'center'}}>{selW.duration}</div>}
+            </div>
           </div>
           {selW.volume>0&&<div style={{height:3,background:'rgba(255,255,255,0.06)',borderRadius:2,overflow:'hidden',marginTop:8}}><div style={{height:'100%',width:`${Math.round((selW.volume/20000)*100)}%`,background:`linear-gradient(90deg,${accent},${THEMES['Crimson']?.p||accent})`,borderRadius:2}}/></div>}
         </div>
@@ -1716,15 +1863,10 @@ function CalendarScreen({accent,calWorkouts,routines}){
         </div>
       )}
       {showSched&&(
-        <div style={{position:'absolute',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.6)',backdropFilter:'blur(8px)'}}>
-          <div style={{background:'#151515',borderRadius:24,padding:'24px 22px',border:'1px solid rgba(255,255,255,0.08)',width:'80%',textAlign:'center'}}>
-            <div style={{fontSize:17,fontWeight:700,color:'#fff',marginBottom:8}}>Schedule Builder</div>
-            <div style={{fontSize:13,color:'rgba(255,255,255,0.35)',marginBottom:20}}>Coming soon — tap days on the calendar to plan individual sessions for now.</div>
-            <div onClick={()=>setShowSched(false)} style={{height:44,borderRadius:14,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-              <span style={{fontSize:14,fontWeight:700,color:accent}}>Got it</span>
-            </div>
-          </div>
-        </div>
+        <ScheduleBuilder accent={accent} routines={routines} schedules={schedules} onSave={s=>{onSaveSchedule(s);setShowSched(false);}} onClose={()=>setShowSched(false)}/>
+      )}
+      {editingSchedule&&(
+        <ScheduleBuilder accent={accent} routines={routines} schedules={schedules} existing={editingSchedule} onSave={s=>{onSaveSchedule(s);setEditingSchedule(null);}} onDelete={()=>{onDeleteSchedule(editingSchedule.id);setEditingSchedule(null);}} onClose={()=>setEditingSchedule(null)}/>
       )}
     </div>
   );
@@ -1901,6 +2043,7 @@ export default function App(){
   const [bwLog,setBwLog]=React.useState(saved?.bwLog||[]);
   const [customExercises,setCustomExercises]=React.useState(saved?.customExercises||[]);
   const [progressionData,setProgressionData]=React.useState(saved?.progressionData||{});
+  const [schedules,setSchedules]=React.useState(saved?.schedules||[]);
 
   const [openRoutine,setOpenRoutine]=React.useState(null);
   const [activeWorkout,setActiveWorkout]=React.useState(null);
@@ -1911,7 +2054,7 @@ export default function App(){
   const accent=THEMES[tw.theme]?.p||'#7dd3fc';
 
   const persist=(updates={})=>{
-    const state={onboarded:true,tw,tab,routines,historyData,bwLog,customExercises,progressionData,...updates};
+    const state={onboarded:true,tw,tab,routines,historyData,bwLog,customExercises,progressionData,schedules,...updates};
     localStorage.setItem('dialed_v4',JSON.stringify(state));
   };
 
@@ -1943,6 +2086,18 @@ export default function App(){
     setRoutines(updated);
     persist({routines:updated});
     setEditingRoutine(null);
+  };
+
+  const handleSaveSchedule=sched=>{
+    const updated=schedules.find(s=>s.id===sched.id)?schedules.map(s=>s.id===sched.id?sched:s):[...schedules,sched];
+    setSchedules(updated);
+    persist({schedules:updated});
+  };
+
+  const handleDeleteSchedule=id=>{
+    const updated=schedules.filter(s=>s.id!==id);
+    setSchedules(updated);
+    persist({schedules:updated});
   };
 
   const handleWorkoutEnd=({discard,updatedRoutine,completedWorkout})=>{
@@ -2163,9 +2318,9 @@ export default function App(){
         <FilmGrain/>
         <StatusBar/>
 
-        {tab==='home'&&<HomeScreen accent={accent} unit={tw.unit} userName={tw.userName} historyData={historyData} muscleSets={muscleSets} weekChart={weekChart} routines={routines} onRoutineTap={r=>setOpenRoutine(r)} onStartPlan={()=>setActiveWorkout(routines[0])} onQuickStart={()=>setActiveWorkout({name:'Free Workout',muscles:['Full Body'],exercises:[],id:null})} onOpenBW={()=>setShowBWChart(true)} bwLog={bwLog} onNewRoutine={()=>setCreatingRoutine(true)}/>}
+        {tab==='home'&&<HomeScreen accent={accent} unit={tw.unit} userName={tw.userName} historyData={historyData} muscleSets={muscleSets} weekChart={weekChart} routines={routines} onRoutineTap={r=>setOpenRoutine(r)} onStartPlan={()=>{const dow=new Date().getDay();const todaySched=schedules.find(s=>s.days.includes(dow));const r=todaySched?routines.find(x=>x.name===todaySched.routineName):routines[0];if(r)setActiveWorkout(r);}} onQuickStart={()=>setActiveWorkout({name:'Free Workout',muscles:['Full Body'],exercises:[],id:null})} onOpenBW={()=>setShowBWChart(true)} bwLog={bwLog} onNewRoutine={()=>setCreatingRoutine(true)} todaySchedule={schedules.find(s=>s.days.includes(new Date().getDay()))}/>}
         {tab==='history'&&<HistoryScreen accent={accent} historyData={historyData} historyWeeks={historyWeeks} progressionData={progressionData} unit={tw.unit}/>}
-        {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines}/>}
+        {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines} schedules={schedules} onSaveSchedule={handleSaveSchedule} onDeleteSchedule={handleDeleteSchedule}/>}
         {tab==='awards'&&<AwardsScreen accent={accent} prsData={prsData} historyData={historyData} currentStreak={currentStreak}/>}
         {tab==='settings'&&<SettingsScreen accent={accent} tw={tw} onTwChange={saveTw} workoutCount={historyData.length} streak={currentStreak}/>}
 
