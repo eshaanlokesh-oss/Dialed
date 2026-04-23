@@ -1429,7 +1429,7 @@ function HomeScreen({accent,unit,userName,historyData,muscleSets,weekChart,routi
             <div style={{position:'relative',zIndex:1}}>
               <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:3,letterSpacing:-0.3}}>Today's Plan</div>
               <div style={{fontSize:11.5,color:'rgba(255,255,255,0.42)',marginBottom:15}}>
-                {todaySchedule?`${todaySchedule.routineName}${todaySchedule.time?' · '+todaySchedule.time:''}`:routines.length>0?`${routines[0].name} · ${routines[0].exercises.length} ex`:'No routines yet'}
+                {todaySchedule?`${todaySchedule.routineName}${todaySchedule.time?' · '+todaySchedule.time:''}`:routines.length>0?`${routines[0].name} · ${routines[0].exercises.length} exercises`:'No routines yet'}
               </div>
               {(todaySchedule||routines.length>0)&&<div style={{display:'inline-flex',alignItems:'center',background:`rgba(${rgb},0.2)`,border:`1px solid rgba(${rgb},0.32)`,borderRadius:20,padding:'5px 13px',fontSize:12,fontWeight:700,color:accent}}>Start →</div>}
             </div>
@@ -1552,8 +1552,8 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
                         <span style={{fontSize:15,fontWeight:700,color:'#fff'}}>{s.routine}</span>
                         {hasPR&&<span style={{fontSize:9.5,fontWeight:800,color:accent,background:`rgba(${rgb},0.14)`,border:`1px solid rgba(${rgb},0.25)`,borderRadius:20,padding:'2px 7px',textTransform:'uppercase',letterSpacing:0.6}}>PR</span>}
                       </div>
-                      <div style={{display:'flex',alignItems:'center',gap:6}}>
-                        {s.muscles.map((m,mi)=>(<React.Fragment key={m}>{mi>0&&<div style={{width:3,height:3,borderRadius:2,background:'rgba(255,255,255,0.12)'}}/>}<span style={{fontSize:11.5,fontWeight:500,color:MC[m]}}>{m}</span></React.Fragment>))}
+                      <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                        {s.muscles.map((m)=>{const mc=MC[m]||accent;const mcr=h2r(mc);return(<span key={m} style={{fontSize:10.5,fontWeight:700,color:mc,background:`rgba(${mcr},0.12)`,border:`1px solid rgba(${mcr},0.22)`,borderRadius:20,padding:'2px 8px'}}>{m}</span>);})}
                       </div>
                     </div>
                     <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3,flexShrink:0}}>
@@ -1603,6 +1603,91 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
         ))}
       </div>
       {chartEx&&<ProgressionSheet exerciseName={chartEx} accent={accent} unit={unit} onClose={()=>setChartEx(null)} progressionData={progressionData}/>}
+    </div>
+  );
+}
+
+// ─── Custom Time Picker ───────────────────────────────────────
+function CustomTimePicker({value, onChange, accent}){
+  const rgb = h2r(accent);
+  // value is "HH:MM" 24h
+  const parseVal = v => {
+    const [h,m] = (v||'07:00').split(':').map(Number);
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return { hour: hour12, minute: m, ampm: h < 12 ? 'AM' : 'PM' };
+  };
+  const {hour: initH, minute: initM, ampm: initA} = parseVal(value);
+  const [hour, setHour] = React.useState(initH);
+  const [minute, setMinute] = React.useState(initM);
+  const [ampm, setAmpm] = React.useState(initA);
+
+  const emit = (h, m, a) => {
+    let h24 = h % 12;
+    if(a === 'PM') h24 += 12;
+    onChange(`${String(h24).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  };
+
+  const setH = v => { setHour(v); emit(v, minute, ampm); };
+  const setM = v => { setMinute(v); emit(hour, v, ampm); };
+  const setA = v => { setAmpm(v); emit(hour, minute, v); };
+
+  const hours = [12,1,2,3,4,5,6,7,8,9,10,11];
+  const minutes = [0,5,10,15,20,25,30,35,40,45,50,55];
+
+  const Drum = ({items, selected, onSelect, fmt}) => {
+    const ref = React.useRef();
+    const itemH = 44;
+    React.useEffect(() => {
+      const idx = items.indexOf(selected);
+      if(ref.current) ref.current.scrollTop = idx * itemH;
+    }, []);
+    return (
+      <div style={{flex:1, position:'relative', height:180, overflow:'hidden'}}>
+        {/* Frosted highlight band */}
+        <div style={{position:'absolute',top:'50%',left:0,right:0,height:itemH,transform:'translateY(-50%)',background:`rgba(${rgb},0.1)`,border:`1px solid rgba(${rgb},0.2)`,borderRadius:12,pointerEvents:'none',zIndex:2}}/>
+        {/* Fade top */}
+        <div style={{position:'absolute',top:0,left:0,right:0,height:60,background:'linear-gradient(to bottom, #131313, transparent)',zIndex:3,pointerEvents:'none'}}/>
+        {/* Fade bottom */}
+        <div style={{position:'absolute',bottom:0,left:0,right:0,height:60,background:'linear-gradient(to top, #131313, transparent)',zIndex:3,pointerEvents:'none'}}/>
+        <div ref={ref} onScroll={e=>{
+          const idx = Math.round(e.target.scrollTop / itemH);
+          if(items[idx] !== undefined) onSelect(items[idx]);
+        }} style={{height:'100%',overflowY:'scroll',scrollSnapType:'y mandatory',scrollbarWidth:'none',WebkitScrollbarWidth:'none',msOverflowStyle:'none',paddingTop:(180/2 - itemH/2),paddingBottom:(180/2 - itemH/2)}}>
+          <style>{`.drum-scroll::-webkit-scrollbar{display:none}`}</style>
+          {items.map(v => {
+            const sel = v === selected;
+            return (
+              <div key={v} onClick={()=>onSelect(v)} style={{height:itemH,display:'flex',alignItems:'center',justifyContent:'center',scrollSnapAlign:'center',cursor:'pointer'}}>
+                <span style={{fontSize:sel?26:18,fontWeight:sel?700:400,color:sel?'#fff':`rgba(255,255,255,${sel?1:0.25})`,transition:'all 0.15s',fontFamily:'Outfit,sans-serif',letterSpacing:-0.5}}>{fmt?fmt(v):String(v).padStart(2,'0')}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{background:'rgba(255,255,255,0.04)',border:`1px solid rgba(${rgb},0.18)`,borderRadius:20,padding:'12px 8px',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)'}}>
+      <div style={{display:'flex',gap:4,alignItems:'center'}}>
+        <Drum items={hours} selected={hour} onSelect={setH} fmt={v=>String(v)}/>
+        <div style={{fontSize:26,fontWeight:700,color:'rgba(255,255,255,0.3)',marginBottom:2,flexShrink:0}}>:</div>
+        <Drum items={minutes} selected={minute} onSelect={setM} fmt={v=>String(v).padStart(2,'0')}/>
+        <div style={{width:1,height:120,background:'rgba(255,255,255,0.07)',flexShrink:0,alignSelf:'center'}}/>
+        <div style={{display:'flex',flexDirection:'column',gap:8,padding:'0 8px',flexShrink:0}}>
+          {['AM','PM'].map(a=>{
+            const sel=ampm===a;
+            return (
+              <div key={a} onClick={()=>setA(a)} style={{padding:'10px 14px',borderRadius:12,cursor:'pointer',background:sel?`rgba(${rgb},0.2)`:'rgba(255,255,255,0.04)',border:sel?`1px solid rgba(${rgb},0.35)`:'1px solid rgba(255,255,255,0.07)',transition:'all 0.15s'}}>
+                <span style={{fontSize:14,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.3)'}}>{a}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{textAlign:'center',marginTop:8,fontSize:13,color:'rgba(255,255,255,0.25)',fontWeight:500}}>
+        {hour}:{String(minute).padStart(2,'0')} {ampm}
+      </div>
     </div>
   );
 }
@@ -1699,9 +1784,7 @@ function ScheduleBuilder({accent,routines,schedules=[],existing,onSave,onDelete,
                 </div>
               </div>
               {useTime&&(
-                <div style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:16,padding:'20px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{background:'none',border:'none',outline:'none',fontSize:36,fontWeight:700,color:'#fff',fontFamily:'Outfit,sans-serif',letterSpacing:-1,cursor:'pointer'}}/>
-                </div>
+                <CustomTimePicker value={time} onChange={setTime} accent={accent}/>
               )}
               {!useTime&&(
                 <div style={{padding:'32px 20px',textAlign:'center'}}>
@@ -1724,7 +1807,7 @@ function ScheduleBuilder({accent,routines,schedules=[],existing,onSave,onDelete,
 }
 
 // ─── Calendar Screen ──────────────────────────────────────────
-function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule,onDeleteSchedule}){
+function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule,onDeleteSchedule,currentStreak=0}){
   const rgb=h2r(accent);
   const today=new Date(2026,3,19);
   const [curYear,setCurYear]=React.useState(2026);const [curMonth,setCurMonth]=React.useState(3);
@@ -1758,7 +1841,7 @@ function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule
   const allW={...schedulePlanned,...calWorkouts,...planned};
   const selW=selected&&allW[selected];
   const monthKeys=Object.keys(allW).filter(k=>k.startsWith(`${curYear}-${String(curMonth+1).padStart(2,'0')}`));
-  const streak=React.useMemo(()=>{let c=0;const d=new Date(today);while(true){const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;if(allW[k]){c++;d.setDate(d.getDate()-1);}else break;}return c;},[allW]);
+  // streak comes from real history via prop, not from planned/scheduled days
   const allRoutinesForPlan=[...(routines||[]),{id:'rest',name:'Rest Day',muscles:['Full Body'],exercises:[],isRest:true}];
   return(
     <div style={{height:'100%',display:'flex',flexDirection:'column',paddingTop:58,paddingBottom:82,position:'relative'}}>
@@ -1767,7 +1850,7 @@ function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule
         <div style={{display:'flex',gap:8}}>
           <div style={{display:'flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:20,padding:'5px 11px'}}>
             <svg width="11" height="13" viewBox="0 0 12 14" fill="none"><path d="M6.5 1C6.5 1 9 4 8.5 6.5C11 5.5 12 3 12 3C12 3 12 9 8 11.5C9 10 9 8.5 7.5 8C7.5 10 5 12 3 13C3 13 0 11 0 8C0 5.5 2 4 3.5 4C2.5 5.5 3 7 4.5 7C4.5 4.5 6.5 1 6.5 1Z" fill={`${accent}cc`}/></svg>
-            <span style={{fontSize:11.5,fontWeight:700,color:accent}}>{streak} days</span>
+            <span style={{fontSize:11.5,fontWeight:700,color:accent}}>{currentStreak} days</span>
           </div>
           <div onClick={()=>setShowSched(true)} style={{width:36,height:36,borderRadius:12,cursor:'pointer',background:`rgba(${rgb},0.14)`,border:`1px solid rgba(${rgb},0.28)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1v14M1 8h14" stroke={accent} strokeWidth="2" strokeLinecap="round"/></svg>
@@ -1787,7 +1870,7 @@ function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule
           const key=keyFor(d);const w=key&&allW[key];const today_=isToday(d);const isSel=key&&key===selected;const future=isFuture(d);
           const isRest=w?.isRest;const pc=w?(isRest?'#94a3b8':(MC[w.muscles?.[0]]||accent)):null;
           return(
-            <div key={i} onClick={()=>{if(!d)return;if(w){setSelected(key);}else if(future||isToday(d)){setPlanDay(key);setSelected(null);}}} style={{height:52,borderRadius:13,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,cursor:d?'pointer':'default',background:isSel?`rgba(${rgb},0.18)`:today_?'rgba(255,255,255,0.07)':future&&!w?'rgba(255,255,255,0.02)':'transparent',border:isSel?`1px solid rgba(${rgb},0.35)`:today_?'1px solid rgba(255,255,255,0.1)':future?'1px dashed rgba(255,255,255,0.06)':'1px solid transparent',transition:'all 0.13s'}}>
+            <div key={i} onClick={()=>{if(!d)return;if(w&&!w.planned){setSelected(key);}else if(w?.planned&&!w.scheduleId){setPlanDay(key);setSelected(null);}else if(w?.scheduleId){setSelected(key);}else if(future||isToday(d)){setPlanDay(key);setSelected(null);}}} style={{height:52,borderRadius:13,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,cursor:d?'pointer':'default',background:isSel?`rgba(${rgb},0.18)`:today_?'rgba(255,255,255,0.07)':future&&!w?'rgba(255,255,255,0.02)':'transparent',border:isSel?`1px solid rgba(${rgb},0.35)`:today_?'1px solid rgba(255,255,255,0.1)':future?'1px dashed rgba(255,255,255,0.06)':'1px solid transparent',transition:'all 0.13s'}}>
               {d&&<>
                 <span style={{fontSize:15,fontWeight:today_||isSel?700:w?500:400,color:isSel?accent:today_?'#fff':w?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.22)',lineHeight:1}}>{d}</span>
                 {w?<div style={{width:5,height:5,borderRadius:3,background:isSel?accent:pc,opacity:isSel?1:0.7}}/>:future?<div style={{width:5,height:5,borderRadius:3,background:'rgba(255,255,255,0.08)'}}/>:null}
@@ -1840,8 +1923,11 @@ function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule
           <div style={{width:'100%',background:'#151515',borderRadius:'28px 28px 0 0',border:'1px solid rgba(255,255,255,0.08)',borderBottom:'none',maxHeight:'80%',display:'flex',flexDirection:'column'}}>
             <div style={{display:'flex',justifyContent:'center',padding:'12px 0 0'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)'}}/></div>
             <div style={{padding:'14px 20px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
-              <div style={{fontSize:18,fontWeight:700,color:'#fff'}}>Plan Day</div>
-              <div onClick={()=>setPlanDay(null)} style={{cursor:'pointer',opacity:0.35}}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg></div>
+              <div style={{fontSize:18,fontWeight:700,color:'#fff'}}>{planned[planDay]?'Change Plan':'Plan Day'}</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                {planned[planDay]&&<div onClick={()=>{setPlanned(p=>{const n={...p};delete n[planDay];return n;});setPlanDay(null);setSelected(null);}} style={{height:30,padding:'0 12px',borderRadius:10,background:'rgba(244,63,94,0.1)',border:'1px solid rgba(244,63,94,0.2)',display:'flex',alignItems:'center',cursor:'pointer'}}><span style={{fontSize:12,fontWeight:700,color:'#f43f5e'}}>Remove</span></div>}
+                <div onClick={()=>setPlanDay(null)} style={{cursor:'pointer',opacity:0.35}}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg></div>
+              </div>
             </div>
             <div style={{overflowY:'auto',padding:'12px 20px 32px'}}>
               {allRoutinesForPlan.map(r=>{
@@ -1964,16 +2050,27 @@ function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
       {children}
     </div>
   );
-  const [notifs,setNotifs]=React.useState(true);const [haptics,setHaptics]=React.useState(true);
+  const [notifs,setNotifs]=React.useState(true);const [haptics,setHaptics]=React.useState(true);const [editingName,setEditingName]=React.useState(false);const [nameInput,setNameInput]=React.useState(tw.userName||'');
   const timerOptions=[30,45,60,90,120,180];
   return(
     <div style={{height:'100%',overflowY:'auto',paddingBottom:90,paddingTop:58}}>
       <div style={{padding:'10px 20px 24px'}}>
         <div style={{marginBottom:24}}><div style={{fontSize:32,fontWeight:700,color:'#fff',letterSpacing:-0.5,marginBottom:4}}>Settings</div><div style={{fontSize:13,color:'rgba(255,255,255,0.3)'}}>Customize your experience</div></div>
-        <div style={{borderRadius:22,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',padding:'16px 18px',marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
-          <div style={{width:52,height:52,borderRadius:18,flexShrink:0,background:`linear-gradient(145deg,rgba(${rgb},0.3),rgba(${rgb},0.1))`,border:`1px solid rgba(${rgb},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:accent}}>{(tw.userName||'A')[0].toUpperCase()}</div>
-          <div><div style={{fontSize:16,fontWeight:700,color:'#fff',marginBottom:2}}>{tw.userName||'Athlete'}</div><div style={{fontSize:12,color:'rgba(255,255,255,0.3)'}}>{workoutCount} workout{workoutCount!==1?'s':''} · {streak} day streak</div></div>
-        </div>
+        {editingName?(
+          <div style={{borderRadius:22,background:'rgba(255,255,255,0.03)',border:`1px solid rgba(${rgb},0.2)`,padding:'16px 18px',marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,0.3)',letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Your Name</div>
+            <div style={{display:'flex',gap:10}}>
+              <input autoFocus value={nameInput} onChange={e=>setNameInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){onTwChange({...tw,userName:nameInput.trim()||tw.userName});setEditingName(false);}}} placeholder="Your name" style={{flex:1,background:'rgba(255,255,255,0.06)',border:`1px solid rgba(${rgb},0.3)`,borderRadius:12,padding:'11px 14px',fontSize:16,fontWeight:600,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif'}}/>
+              <div onClick={()=>{onTwChange({...tw,userName:nameInput.trim()||tw.userName});setEditingName(false);}} style={{height:44,padding:'0 18px',borderRadius:12,background:`rgba(${rgb},0.18)`,border:`1px solid rgba(${rgb},0.3)`,display:'flex',alignItems:'center',cursor:'pointer'}}><span style={{fontSize:14,fontWeight:700,color:accent}}>Save</span></div>
+            </div>
+          </div>
+        ):(
+          <div onClick={()=>{setNameInput(tw.userName||'');setEditingName(true);}} style={{borderRadius:22,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',padding:'16px 18px',marginBottom:20,display:'flex',alignItems:'center',gap:14,cursor:'pointer'}}>
+            <div style={{width:52,height:52,borderRadius:18,flexShrink:0,background:`linear-gradient(145deg,rgba(${rgb},0.3),rgba(${rgb},0.1))`,border:`1px solid rgba(${rgb},0.25)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:accent}}>{(tw.userName||'A')[0].toUpperCase()}</div>
+            <div style={{flex:1}}><div style={{fontSize:16,fontWeight:700,color:'#fff',marginBottom:2}}>{tw.userName||'Athlete'}</div><div style={{fontSize:12,color:'rgba(255,255,255,0.3)'}}>{workoutCount} workout{workoutCount!==1?'s':''} · {streak} day streak</div></div>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 1l4 4-8 8H1v-4L9 1Z" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+          </div>
+        )}
         <div style={{marginBottom:16}}><Lbl>Appearance</Lbl>
           <div style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,overflow:'hidden'}}>
             <Row label="Accent Color" sub="Theme for highlights and buttons">
@@ -2320,7 +2417,7 @@ export default function App(){
 
         {tab==='home'&&<HomeScreen accent={accent} unit={tw.unit} userName={tw.userName} historyData={historyData} muscleSets={muscleSets} weekChart={weekChart} routines={routines} onRoutineTap={r=>setOpenRoutine(r)} onStartPlan={()=>{const dow=new Date().getDay();const todaySched=schedules.find(s=>s.days.includes(dow));const r=todaySched?routines.find(x=>x.name===todaySched.routineName):routines[0];if(r)setActiveWorkout(r);}} onQuickStart={()=>setActiveWorkout({name:'Free Workout',muscles:['Full Body'],exercises:[],id:null})} onOpenBW={()=>setShowBWChart(true)} bwLog={bwLog} onNewRoutine={()=>setCreatingRoutine(true)} todaySchedule={schedules.find(s=>s.days.includes(new Date().getDay()))}/>}
         {tab==='history'&&<HistoryScreen accent={accent} historyData={historyData} historyWeeks={historyWeeks} progressionData={progressionData} unit={tw.unit}/>}
-        {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines} schedules={schedules} onSaveSchedule={handleSaveSchedule} onDeleteSchedule={handleDeleteSchedule}/>}
+        {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines} schedules={schedules} onSaveSchedule={handleSaveSchedule} onDeleteSchedule={handleDeleteSchedule} currentStreak={currentStreak}/>}
         {tab==='awards'&&<AwardsScreen accent={accent} prsData={prsData} historyData={historyData} currentStreak={currentStreak}/>}
         {tab==='settings'&&<SettingsScreen accent={accent} tw={tw} onTwChange={saveTw} workoutCount={historyData.length} streak={currentStreak}/>}
 
