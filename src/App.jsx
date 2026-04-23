@@ -134,7 +134,7 @@ function OnboardingScreen({onComplete}){
         {step===1&&(
           <div style={{animation:'dialIn 0.35s ease'}}>
             <div style={{fontSize:28,fontWeight:800,color:'#fff',letterSpacing:-1,marginBottom:8}}>What's your name?</div>
-            <div style={{marginBottom:32}}/>
+            <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:32}}>We'll use it to personalise your experience.</div>
             <input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&name.trim())setStep(2);}} placeholder="Your first name" style={{width:'100%',background:'rgba(255,255,255,0.06)',border:`1px solid rgba(${rgb},0.3)`,borderRadius:16,padding:'16px 18px',fontSize:18,fontWeight:600,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif'}}/>
           </div>
         )}
@@ -977,7 +977,7 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
               <div onClick={()=>{setFinishConfirm(false);handleFinish();}} style={{height:54,borderRadius:16,background:`linear-gradient(135deg,${accent},${THEMES['Crimson']?.p||accent})`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:`0 6px 24px rgba(${rgb},0.3)`}}>
                 <span style={{fontSize:16,fontWeight:700,color:'#000'}}>Save & Finish</span>
               </div>
-              <div onClick={()=>{setFinishConfirm(false);setShowShareCard(true);}} style={{height:54,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',gap:8}}>
+              <div onClick={()=>{setFinishConfirm(false);setFinished(true);setShowShareCard(true);}} style={{height:54,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',gap:8}}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 1l3 3-3 3M1 7v1a5 5 0 005 5h1M13 4H6a5 5 0 00-5 5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.4)'}}>Save & Share</span>
               </div>
@@ -1043,26 +1043,24 @@ function PlateCalculator({accent,unit,onClose}){
   const achievable=effectiveBar+plates.reduce((a,{plate,count})=>a+plate*count*2,0);
   const isExact=targetNum>0&&Math.abs(achievable-targetNum)<0.01;
 
-  // Visual bar — single side: sleeve + bar + plates stacking left to right, centered
-  const SLEEVE_W=40; const BAR_STUB=80; const PLATE_GAP=3;
-  const plateRects=[];
-  let totalPlateW=0;
+  // Visual bar — centered full bar: [plates] [collar] [bar shaft] [collar] [plates]
+  const COLLAR_W=12; const BAR_SHAFT_W=60; const PLATE_GAP=2;
+  // Build plate dimensions for one side
+  const sidePlates=[];
   plates.forEach(({plate,count})=>{
-    const pw=Math.max(20,plate*0.75);
-    totalPlateW+=pw*count+PLATE_GAP*count;
+    const pw=Math.max(16,plate*0.65); const ph=Math.min(76,24+plate*0.85);
+    for(let i=0;i<count;i++) sidePlates.push({w:pw,h:ph,color:PLATE_COLORS[plate]||'#94a3b8',label:plate});
   });
-  // Build plate rects starting after sleeve+bar
-  let px2=SLEEVE_W+BAR_STUB;
-  plates.forEach(({plate,count})=>{
-    const pw=Math.max(20,plate*0.75); const ph=Math.min(80,26+plate*0.9);
-    for(let i=0;i<count;i++){
-      plateRects.push({x:px2,w:pw,h:ph,color:PLATE_COLORS[plate]||'#94a3b8',label:plate});
-      px2+=pw+PLATE_GAP;
-    }
-  });
-  const totalSvgW=SLEEVE_W+BAR_STUB+totalPlateW+20;
-  const BAR_H=56;
-
+  const oneSideW=sidePlates.reduce((a,p)=>a+p.w+PLATE_GAP,0);
+  const totalSvgW=Math.max(oneSideW*2+COLLAR_W*2+BAR_SHAFT_W+40,200);
+  const BAR_H=60;
+  const cx=totalSvgW/2;
+  // Right side plates (from collar outward right)
+  let rx=cx+BAR_SHAFT_W/2+COLLAR_W;
+  const rightPlates=sidePlates.map(p=>{const x=rx;rx+=p.w+PLATE_GAP;return {...p,x};});
+  // Left side plates (mirror, from collar outward left)
+  let lx=cx-BAR_SHAFT_W/2-COLLAR_W;
+  const leftPlates=[...sidePlates].map(p=>{lx-=p.w+PLATE_GAP;return {...p,x:lx};});
   return(
     <div style={{position:'absolute',inset:0,zIndex:500,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
       <div style={{width:'100%',background:'#141414',borderRadius:'28px 28px 0 0',border:'1px solid rgba(255,255,255,0.08)',borderBottom:'none',maxHeight:'88%',display:'flex',flexDirection:'column',animation:'slideUp 0.28s cubic-bezier(0.32,0.72,0,1)'}}>
@@ -1094,28 +1092,34 @@ function PlateCalculator({accent,unit,onClose}){
             )}
           </div>
 
-          {/* Visual bar diagram */}
+          {/* Visual bar diagram — centered full bar */}
           {targetNum>0&&(
-            <div style={{marginBottom:20,background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,padding:'20px 16px',overflowX:'auto'}}>
-              <svg width={Math.max(totalSvgW,200)} height={BAR_H+16} style={{display:'block',margin:'0 auto',overflow:'visible'}}>
-                {/* Collar/sleeve end cap */}
-                <rect x={0} y={BAR_H/2-7} width={SLEEVE_W} height={14} rx={4} fill="#555"/>
-                <text x={SLEEVE_W/2} y={BAR_H/2+4} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="700">{effectiveBar}</text>
-                {/* Bar shaft */}
-                <rect x={SLEEVE_W} y={BAR_H/2-3} width={BAR_STUB} height={6} rx={3} fill="#333"/>
-                {/* Plates */}
-                {plateRects.map((p,i)=>{
-                  const py=(BAR_H-p.h)/2;
-                  return(
-                    <g key={i}>
-                      <rect x={p.x} y={py} width={p.w} height={p.h} rx={4} fill={p.color} opacity="0.92"/>
-                      {p.w>=20&&<text x={p.x+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
-                    </g>
-                  );
-                })}
-                {/* Date labels */}
-                {plateRects.length===0&&(
-                  <text x={SLEEVE_W+BAR_STUB/2} y={BAR_H+12} textAnchor="middle" fill="rgba(255,255,255,0.2)" fontSize="10" fontFamily="Outfit,sans-serif">Bar only</text>
+            <div style={{marginBottom:20,background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,padding:'20px 8px',overflowX:'auto'}}>
+              <svg width="100%" viewBox={`0 0 ${totalSvgW} ${BAR_H+16}`} style={{display:'block',overflow:'visible',minWidth:totalSvgW>320?totalSvgW:undefined}}>
+                {/* Bar shaft (center) */}
+                <rect x={cx-BAR_SHAFT_W/2} y={BAR_H/2-3} width={BAR_SHAFT_W} height={6} rx={3} fill="#333"/>
+                {/* Bar weight label */}
+                <text x={cx} y={BAR_H+13} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="Outfit,sans-serif" fontWeight="600">{effectiveBar}{unit} bar</text>
+                {/* Left collar */}
+                <rect x={cx-BAR_SHAFT_W/2-COLLAR_W} y={BAR_H/2-6} width={COLLAR_W} height={12} rx={3} fill="#666"/>
+                {/* Right collar */}
+                <rect x={cx+BAR_SHAFT_W/2} y={BAR_H/2-6} width={COLLAR_W} height={12} rx={3} fill="#666"/>
+                {/* Left plates */}
+                {leftPlates.map((p,i)=>{const py=(BAR_H-p.h)/2;return(
+                  <g key={`l${i}`}>
+                    <rect x={p.x} y={py} width={p.w} height={p.h} rx={3} fill={p.color} opacity="0.92"/>
+                    {p.w>=18&&<text x={p.x+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="8" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
+                  </g>
+                );})}
+                {/* Right plates */}
+                {rightPlates.map((p,i)=>{const py=(BAR_H-p.h)/2;return(
+                  <g key={`r${i}`}>
+                    <rect x={p.x} y={py} width={p.w} height={p.h} rx={3} fill={p.color} opacity="0.92"/>
+                    {p.w>=18&&<text x={p.x+p.w/2} y={py+p.h/2+4} textAnchor="middle" fill="#000" fontSize="8" fontFamily="Outfit,sans-serif" fontWeight="800">{p.label}</text>}
+                  </g>
+                );})}
+                {sidePlates.length===0&&(
+                  <text x={cx} y={BAR_H+13} textAnchor="middle" fill="rgba(255,255,255,0.2)" fontSize="10" fontFamily="Outfit,sans-serif">Bar only</text>
                 )}
               </svg>
             </div>
@@ -1522,11 +1526,13 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
       </div>
     </div>
   );
+  // If grouping failed (e.g. all sessions fell into no bucket), fall back to showing all as "Recent"
+  const displayWeeks = historyWeeks.length > 0 ? historyWeeks : [{label:'Recent',ids:historyData.map(s=>s.id),vol:historyData.reduce((a,s)=>a+(s.volume||0),0),workouts:historyData.length}];
   return(
     <div style={{height:'100%',overflowY:'auto',paddingBottom:90,paddingTop:58,position:'relative'}}>
       <div style={{padding:'10px 20px 20px'}}>
         <div style={{fontSize:32,fontWeight:700,color:'#fff',letterSpacing:-0.5,marginBottom:20}}>History</div>
-        {historyWeeks.map(week=>(
+        {displayWeeks.map(week=>(
           <div key={week.label} style={{marginBottom:28}}>
             <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:12}}>
               <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,0.2)',letterSpacing:1.3,textTransform:'uppercase'}}>{week.label}</div>
@@ -1725,25 +1731,28 @@ function CalendarScreen({accent,calWorkouts,routines}){
 }
 
 // ─── Awards Screen ────────────────────────────────────────────
-function AwardsScreen({accent,prsData}){
+function AwardsScreen({accent,prsData,historyData=[],currentStreak=0}){
   const rgb=h2r(accent);
+  const totalWorkouts = historyData.length;
+  const totalVolK = Math.round(historyData.reduce((a,s)=>a+(s.volume||0),0)/1000);
+  const totalPRs = prsData.length;
   const MILESTONES=[
-    {label:'Total Workouts',value:47,target:50,unit:'sessions',icon:'🏋️',unlocked:true,color:'#60a5fa'},
-    {label:'Total Volume',value:842,target:1000,unit:'k lbs',icon:'⚡',unlocked:true,color:'#facc15'},
-    {label:'Longest Streak',value:7,target:10,unit:'days',icon:'🔥',unlocked:true,color:'#fb923c'},
-    {label:'PRs This Month',value:6,target:10,unit:'records',icon:'🎯',unlocked:true,color:'#34d399'},
-    {label:'100 Sessions',value:47,target:100,unit:'sessions',icon:'💎',unlocked:false,color:'#a78bfa'},
-    {label:'Iron Streak',value:7,target:30,unit:'days',icon:'⚔️',unlocked:false,color:'#f43f5e'},
+    {label:'Total Workouts',value:totalWorkouts,target:50,unit:'sessions',icon:'🏋️',unlocked:totalWorkouts>=1,color:'#60a5fa'},
+    {label:'Total Volume',value:totalVolK,target:1000,unit:'k lbs',icon:'⚡',unlocked:totalVolK>=100,color:'#facc15'},
+    {label:'Current Streak',value:currentStreak,target:10,unit:'days',icon:'🔥',unlocked:currentStreak>=3,color:'#fb923c'},
+    {label:'Personal Records',value:totalPRs,target:10,unit:'PRs',icon:'🎯',unlocked:totalPRs>=1,color:'#34d399'},
+    {label:'100 Sessions',value:totalWorkouts,target:100,unit:'sessions',icon:'💎',unlocked:totalWorkouts>=100,color:'#a78bfa'},
+    {label:'Iron Streak',value:currentStreak,target:30,unit:'days',icon:'⚔️',unlocked:currentStreak>=30,color:'#f43f5e'},
   ];
   const BADGES=[
-    {name:'First Rep',desc:'Logged your first workout',earned:true,color:'#34d399',icon:'▶'},
-    {name:'Week Warrior',desc:'7 workouts in a week',earned:true,color:'#60a5fa',icon:'🗓'},
-    {name:'PR Machine',desc:'Set 5 personal records',earned:true,color:'#facc15',icon:'⚡'},
-    {name:'Iron Will',desc:'30-day streak',earned:false,color:'#f43f5e',icon:'🔥'},
-    {name:'Volume King',desc:'1,000,000 lbs total',earned:false,color:'#a78bfa',icon:'👑'},
-    {name:'Century Club',desc:'100 workouts',earned:false,color:'#fb923c',icon:'💯'},
+    {name:'First Rep',desc:'Logged your first workout',earned:totalWorkouts>=1,color:'#34d399',icon:'▶'},
+    {name:'Week Warrior',desc:'7 workouts in a week',earned:totalWorkouts>=7,color:'#60a5fa',icon:'🗓'},
+    {name:'PR Machine',desc:'Set 5 personal records',earned:totalPRs>=5,color:'#facc15',icon:'⚡'},
+    {name:'Iron Will',desc:'30-day streak',earned:currentStreak>=30,color:'#f43f5e',icon:'🔥'},
+    {name:'Volume King',desc:'1,000,000 lbs total',earned:totalVolK>=1000,color:'#a78bfa',icon:'👑'},
+    {name:'Century Club',desc:'100 workouts',earned:totalWorkouts>=100,color:'#fb923c',icon:'💯'},
   ];
-  if(!prsData.length) return(
+  if(!totalWorkouts) return(
     <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:'58px 32px 90px'}}>
       <div style={{textAlign:'center'}}>
         <div style={{fontSize:48,marginBottom:16}}>🏆</div>
@@ -1760,10 +1769,10 @@ function AwardsScreen({accent,prsData}){
           <div style={{position:'absolute',top:-40,right:-20,width:140,height:140,borderRadius:'50%',background:`rgba(${rgb},0.18)`,filter:'blur(50px)',pointerEvents:'none'}}/>
           <div style={{position:'relative',zIndex:1}}>
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:18}}>
-              <div><div style={{fontSize:12,fontWeight:700,color:'rgba(255,255,255,0.28)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Current Streak</div><div style={{display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:52,fontWeight:700,color:'#fff',letterSpacing:-2,lineHeight:1}}>5</span><span style={{fontSize:18,fontWeight:300,color:'rgba(255,255,255,0.35)'}}>days</span></div></div>
+              <div><div style={{fontSize:12,fontWeight:700,color:'rgba(255,255,255,0.28)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Current Streak</div><div style={{display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:52,fontWeight:700,color:'#fff',letterSpacing:-2,lineHeight:1}}>{currentStreak}</span><span style={{fontSize:18,fontWeight:300,color:'rgba(255,255,255,0.35)'}}>days</span></div></div>
               <div style={{width:52,height:52,borderRadius:18,background:`rgba(${rgb},0.18)`,border:`1px solid rgba(${rgb},0.3)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>🔥</div>
             </div>
-            <div style={{display:'flex',gap:6}}>{[...Array(7)].map((_,i)=>{const f=i<5;return <div key={i} style={{flex:1,height:6,borderRadius:3,background:f?`rgba(${rgb},0.8)`:'rgba(255,255,255,0.07)',boxShadow:f?`0 0 8px rgba(${rgb},0.5)`:'none'}}/>;})}
+            <div style={{display:'flex',gap:6}}>{[...Array(7)].map((_,i)=>{const f=i<currentStreak;return <div key={i} style={{flex:1,height:6,borderRadius:3,background:f?`rgba(${rgb},0.8)`:'rgba(255,255,255,0.07)',boxShadow:f?`0 0 8px rgba(${rgb},0.5)`:'none'}}/>;})}
             </div>
           </div>
         </div>
@@ -1847,8 +1856,11 @@ function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
             </Row>
             <Row label="Rest Timer" sub="Auto-start after set completion" last={!tw.restTimerEnabled}><Toggle value={tw.restTimerEnabled} onChange={v=>onTwChange({...tw,restTimerEnabled:v})}/></Row>
             {tw.restTimerEnabled&&(
-              <div style={{padding:'10px 18px 14px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
-                <div style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.5)',marginBottom:10}}>Rest Duration</div>
+              <div style={{padding:'10px 18px 16px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
+                <div style={{display:'flex',flexDirection:'column',gap:2,marginBottom:12}}>
+                  <div style={{fontSize:14,fontWeight:500,color:'rgba(255,255,255,0.7)'}}>Rest Duration</div>
+                  <div style={{fontSize:11.5,color:'rgba(255,255,255,0.28)'}}>Seconds between sets</div>
+                </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                   {timerOptions.map(s=>{const sel=tw.restTimerDuration===s;const sr=h2r(accent);return <div key={s} onClick={()=>onTwChange({...tw,restTimerDuration:s})} style={{padding:'6px 14px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${sr},0.2)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${sr},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)',transition:'all 0.15s'}}>{s}s</div>;})}
                 </div>
@@ -2036,16 +2048,21 @@ export default function App(){
     if(!historyData.length) return [];
     // Group into This Week / Last Week / older
     const today = new Date();
-    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate()-today.getDay());
+    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate()-today.getDay()); startOfWeek.setHours(0,0,0,0);
     const startOfLastWeek = new Date(startOfWeek); startOfLastWeek.setDate(startOfWeek.getDate()-7);
     const thisWeek = [], lastWeek = [], older = [];
     historyData.forEach(s => {
-      const raw = s.date||'';
+      // Prefer dateISO (YYYY-MM-DD) which is always saved correctly
       let d = null;
-      try {
-        const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
-        d = new Date(`${cleaned} 2026`);
-      } catch(e){}
+      if(s.dateISO) {
+        d = new Date(s.dateISO + 'T12:00:00');
+      } else {
+        try {
+          const raw = s.date||'';
+          const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
+          d = new Date(`${cleaned} 2026`);
+        } catch(e){}
+      }
       if(d && !isNaN(d)){
         if(d >= startOfWeek) thisWeek.push(s);
         else if(d >= startOfLastWeek) lastWeek.push(s);
@@ -2066,14 +2083,18 @@ export default function App(){
   const calWorkouts = React.useMemo(() => {
     const map = {};
     historyData.forEach(s => {
-      const raw = s.date||'';
-      let d = null;
-      try {
-        const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
-        d = new Date(`${cleaned} 2026`);
-      } catch(e){}
-      if(d && !isNaN(d)){
-        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      let key = null;
+      if(s.dateISO) {
+        key = s.dateISO;
+      } else {
+        try {
+          const raw = s.date||'';
+          const cleaned = raw.replace(/^Today,\s*/i,'').replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'');
+          const d = new Date(`${cleaned} 2026`);
+          if(!isNaN(d)) key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        } catch(e){}
+      }
+      if(key){
         map[key] = {
           routine: s.routine,
           muscles: s.muscles,
@@ -2143,7 +2164,7 @@ export default function App(){
         {tab==='home'&&<HomeScreen accent={accent} unit={tw.unit} userName={tw.userName} historyData={historyData} muscleSets={muscleSets} weekChart={weekChart} routines={routines} onRoutineTap={r=>setOpenRoutine(r)} onStartPlan={()=>setActiveWorkout(routines[0])} onQuickStart={()=>setActiveWorkout({name:'Free Workout',muscles:['Full Body'],exercises:[],id:null})} onOpenBW={()=>setShowBWChart(true)} bwLog={bwLog} onNewRoutine={()=>setCreatingRoutine(true)}/>}
         {tab==='history'&&<HistoryScreen accent={accent} historyData={historyData} historyWeeks={historyWeeks} progressionData={progressionData} unit={tw.unit}/>}
         {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines}/>}
-        {tab==='awards'&&<AwardsScreen accent={accent} prsData={prsData}/>}
+        {tab==='awards'&&<AwardsScreen accent={accent} prsData={prsData} historyData={historyData} currentStreak={currentStreak}/>}
         {tab==='settings'&&<SettingsScreen accent={accent} tw={tw} onTwChange={saveTw} workoutCount={historyData.length} streak={currentStreak}/>}
 
         {openRoutine&&<RoutineSheet r={openRoutine} accent={accent} onClose={()=>setOpenRoutine(null)} onStart={r=>{setOpenRoutine(null);setActiveWorkout(r);}} onEdit={r=>{setEditingRoutine(r);}}/>}
