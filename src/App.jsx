@@ -2150,8 +2150,13 @@ export default function App(){
 
   const accent=THEMES[tw.theme]?.p||'#7dd3fc';
 
+  // Use a ref so persist() always reads the latest state, never stale closure values
+  const stateRef = React.useRef({});
+  React.useEffect(()=>{
+    stateRef.current = {tw,tab,routines,historyData,bwLog,customExercises,progressionData,schedules};
+  });
   const persist=(updates={})=>{
-    const state={onboarded:true,tw,tab,routines,historyData,bwLog,customExercises,progressionData,schedules,...updates};
+    const state={onboarded:true,...stateRef.current,...updates};
     localStorage.setItem('dialed_v4',JSON.stringify(state));
   };
 
