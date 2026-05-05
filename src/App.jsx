@@ -335,7 +335,7 @@ function CustomExerciseCreator({accent,onClose,onSave}){
 }
 
 // ─── Routine Builder (create + edit) ─────────────────────────
-function RoutineBuilder({accent,existing,onClose,onSave,onDelete,customExercises}){
+function RoutineBuilder({accent,existing,onClose,onSave,onDelete,customExercises,onSaveCustomExercise}){
   const rgb=h2r(accent);
   const isEdit=!!existing;
   const [rName,setRName]=React.useState(existing?.name||'');
@@ -343,7 +343,8 @@ function RoutineBuilder({accent,existing,onClose,onSave,onDelete,customExercises
   const [showPicker,setShowPicker]=React.useState(false);
   const [showDeleteConfirm,setShowDeleteConfirm]=React.useState(false);
 
-  const muscleFor=exName=>{const f=[...ALL_EXERCISES,...(customExercises||[])].find(e=>e.name===exName);return f?f.muscle:'Full Body';};
+  const [localCustom,setLocalCustom]=React.useState(customExercises||[]);
+  const muscleFor=exName=>{const f=[...ALL_EXERCISES,...localCustom].find(e=>e.name===exName);return f?f.muscle:'Full Body';};
   const derivedMuscles=[...new Set(exercises.map(e=>muscleFor(e.name)))].slice(0,3);
 
   const addEx=ex=>{setExercises(p=>[...p,{name:ex.name,sets:3,reps:'8–12',last:'—',_id:uid()}]);setShowPicker(false);};
@@ -435,7 +436,7 @@ function RoutineBuilder({accent,existing,onClose,onSave,onDelete,customExercises
         )}
       </div>
 
-      {showPicker&&<ExercisePicker accent={accent} onAdd={addEx} onClose={()=>setShowPicker(false)} customExercises={customExercises}/>}
+      {showPicker&&<ExercisePicker accent={accent} onAdd={addEx} onClose={()=>setShowPicker(false)} customExercises={localCustom} onNewCustomSaved={ex=>{setLocalCustom(p=>[...p,ex]);if(onSaveCustomExercise)onSaveCustomExercise(ex);}}/>}
 
       {/* Delete confirm */}
       {showDeleteConfirm&&(
@@ -794,9 +795,13 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
     });
     const totalVol=completedExercises.reduce((a,e)=>a+e.totalVolume,0);
     const totalDoneSets=completedExercises.reduce((a,e)=>a+e.sets.length,0);
+    // For free/quick workouts, derive actual muscles from the exercises logged
+    const derivedM=routine.id===null&&completedExercises.length>0
+      ?[...new Set(completedExercises.map(e=>muscleFor(e.name)).filter(m=>m&&m!=='Full Body'))].slice(0,4)
+      :null;
     return {
       routineName:routine.name,
-      muscles:routine.muscles,
+      muscles:derivedM&&derivedM.length>0?derivedM:routine.muscles,
       duration:fmt(elapsed),
       volume:Math.round(totalVol),
       totalSets:totalDoneSets,
@@ -804,6 +809,24 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
       notes:workoutNotes,
     };
   };
+
+  // Persist in-progress workout to sessionStorage so tab switches don't kill it
+  React.useEffect(()=>{
+    if(!finished){
+      try{
+        sessionStorage.setItem('dialed_active_workout',JSON.stringify({
+          routineId:routine.id,
+          routineName:routine.name,
+          exercises,
+          sets,
+          elapsed,
+          workoutNotes,
+        }));
+      }catch(e){}
+    } else {
+      sessionStorage.removeItem('dialed_active_workout');
+    }
+  },[exercises,sets,elapsed,workoutNotes,finished]);
 
   const handleFinish=()=>{
     const curNames=exercises.map(e=>e.name);
@@ -1810,7 +1833,7 @@ function ScheduleBuilder({accent,routines,schedules=[],existing,onSave,onDelete,
 function CalendarScreen({accent,calWorkouts,routines,schedules=[],onSaveSchedule,onDeleteSchedule,currentStreak=0}){
   const rgb=h2r(accent);
   const today=new Date(2026,3,19);
-  const [curYear,setCurYear]=React.useState(2026);const [curMonth,setCurMonth]=React.useState(3);
+  const _now=new Date();const [curYear,setCurYear]=React.useState(_now.getFullYear());const [curMonth,setCurMonth]=React.useState(_now.getMonth());
   const [selected,setSelected]=React.useState(null);const [planDay,setPlanDay]=React.useState(null);
   const [planned,setPlanned]=React.useState({});const [showSched,setShowSched]=React.useState(false);const [editingSchedule,setEditingSchedule]=React.useState(null);
   const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2430,7 +2453,7 @@ export default function App(){
 
         {activeWorkout&&<WorkoutScreen routine={activeWorkout} accent={accent} onEnd={handleWorkoutEnd} restTimerEnabled={tw.restTimerEnabled} restTimerDuration={tw.restTimerDuration} progressionData={progressionData} customExercises={customExercises} historyData={historyData} onSaveCustomExercise={handleSaveCustomExercise} unit={tw.unit} userName={tw.userName}/>}
 
-        {(editingRoutine||creatingRoutine)&&<RoutineBuilder accent={accent} existing={editingRoutine||null} onClose={()=>{setEditingRoutine(null);setCreatingRoutine(false);}} onSave={handleSaveRoutine} onDelete={handleDeleteRoutine} customExercises={customExercises}/>}
+        {(editingRoutine||creatingRoutine)&&<RoutineBuilder accent={accent} existing={editingRoutine||null} onClose={()=>{setEditingRoutine(null);setCreatingRoutine(false);}} onSave={handleSaveRoutine} onDelete={handleDeleteRoutine} customExercises={customExercises} onSaveCustomExercise={handleSaveCustomExercise}/>}
 
         {showBWChart&&<BodyweightSheet accent={accent} unit={tw.unit} bwLog={bwLog} onClose={()=>setShowBWChart(false)} onAdd={handleAddBW}/>}
 
