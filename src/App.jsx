@@ -3,6 +3,28 @@ import {
   THEMES, MC, TWEAK_DEFAULTS, DEFAULT_ROUTINES,
   ALL_EXERCISES, EXERCISE_TYPES, EXERCISE_TYPE_COLORS,
 } from './data.js';
+import { supabase } from './supabase.js';
+import { pushToCloud, pullFromCloud } from './sync.js';
+
+// ─── Native detection & haptics ───────────────────────────────
+const isNative = () => !!(window.Capacitor?.isNativePlatform?.());
+const haptic = async (style = 'medium') => {
+  if (!isNative()) return;
+  try {
+    // @ts-ignore
+    const mod = await import(/* @vite-ignore */ '@capacitor/haptics');
+    const s = style === 'light' ? mod.ImpactStyle.Light : style === 'heavy' ? mod.ImpactStyle.Heavy : mod.ImpactStyle.Medium;
+    await mod.Haptics.impact({ style: s });
+  } catch(e) {}
+};
+const hapticSelect = async () => {
+  if (!isNative()) return;
+  try {
+    // @ts-ignore
+    const mod = await import(/* @vite-ignore */ '@capacitor/haptics');
+    await mod.Haptics.selectionChanged();
+  } catch(e) {}
+};
 
 // ─── Helpers ──────────────────────────────────────────────────
 const h2r = hex => {
@@ -83,6 +105,7 @@ function StatusBar(){
 const Lbl = ({children}) => <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.3,textTransform:'uppercase',marginBottom:14}}>{children}</div>;
 
 function PhoneFrame({children}){
+  if(isNative()) return <div style={{width:'100%',height:'100dvh',overflow:'hidden',background:'#0d0d0d',position:'relative'}}>{children}</div>;
   return(
     <div style={{position:'relative',borderRadius:57,padding:11,background:'linear-gradient(150deg,#262626 0%,#0f0f0f 60%,#1a1a1a 100%)',boxShadow:'0 64px 120px rgba(0,0,0,0.85),0 0 0 1px rgba(255,255,255,0.07),inset 0 1px 0 rgba(255,255,255,0.09)'}}>
       {[[true,118,32],[true,162,32],[true,210,68],[false,166,82]].map(([l,top,h],i)=>(
@@ -755,7 +778,15 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
   const [exercises,setExercises]=React.useState(routine.exercises);
 
   const [finished,setFinished]=React.useState(false);
-  React.useEffect(()=>{if(finished)return;const t=setInterval(()=>setElapsed(s=>s+1),1000);return()=>clearInterval(t);},[finished]);
+  const startTimeRef=React.useRef(Date.now());
+  React.useEffect(()=>{
+    if(finished)return;
+    const tick=()=>setElapsed(Math.floor((Date.now()-startTimeRef.current)/1000));
+    const t=setInterval(tick,1000);
+    const onVisible=()=>{if(document.visibilityState==='visible')tick();};
+    document.addEventListener('visibilitychange',onVisible);
+    return()=>{clearInterval(t);document.removeEventListener('visibilitychange',onVisible);};
+  },[finished]);
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const totalSets=sets.reduce((a,ex)=>a+ex.length,0);
   const doneSets=sets.reduce((a,ex)=>a+ex.filter(s=>s.done).length,0);
@@ -764,9 +795,12 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
   const toggleDone=(ei,si)=>{
     const s=sets[ei][si];
     const repsVal=parseInt(s.reps)||0;
-    if(!s.done&&repsVal===0)return; // block if reps=0
+    if(!s.done&&repsVal===0)return;
     setSets(prev=>{const n=prev.map(ex=>ex.map(s=>({...s})));n[ei][si].done=!n[ei][si].done;return n;});
-    if(restTimerEnabled&&!s.done&&repsVal>0)setRestTimer(restTimerDuration);
+    if(!s.done&&repsVal>0){
+      haptic('medium');
+      if(restTimerEnabled)setRestTimer(restTimerDuration);
+    }
   };
   const addSet=(ei)=>{
     const prev=lastLogged[exercises[ei]?.name];
@@ -861,7 +895,7 @@ function WorkoutScreen({routine,accent,onEnd,restTimerEnabled,restTimerDuration,
             <span style={{fontSize:13,fontWeight:600,color:'#f43f5e'}}>Discard</span>
           </div>
           <div style={{fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.3)'}}>{doneSets}/{totalSets}</div>
-          <div onClick={()=>{setFinishConfirm(true);setFinished(true);}} style={{height:36,padding:'0 18px',borderRadius:12,background:`linear-gradient(135deg,${accent},${THEMES['Crimson']?.p||accent})`,display:'flex',alignItems:'center',cursor:'pointer',boxShadow:`0 4px 16px rgba(${rgb},0.35)`}}>
+          <div onClick={()=>{haptic('heavy');setFinishConfirm(true);setFinished(true);}} style={{height:36,padding:'0 18px',borderRadius:12,background:`linear-gradient(135deg,${accent},${THEMES['Crimson']?.p||accent})`,display:'flex',alignItems:'center',cursor:'pointer',boxShadow:`0 4px 16px rgba(${rgb},0.35)`}}>
             <span style={{fontSize:14,fontWeight:700,color:'#000'}}>Finish</span>
           </div>
         </div>
@@ -1212,7 +1246,7 @@ function WorkoutNotesSheet({accent,notes,onSave,onClose}){
             onChange={e=>setText(e.target.value)}
             placeholder="How did the session feel? Any notes on form, energy, sleep..."
             rows={6}
-            style={{width:'100%',background:'rgba(255,255,255,0.05)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:16,padding:'14px 16px',fontSize:15,fontWeight:400,color:'#fff',outline:'none',fontFamily:'Outfit,sans-serif',resize:'none',lineHeight:1.6,color:'rgba(255,255,255,0.85)'}}
+            style={{width:'100%',background:'rgba(255,255,255,0.05)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:16,padding:'14px 16px',fontSize:15,fontWeight:400,outline:'none',fontFamily:'Outfit,sans-serif',resize:'none',lineHeight:1.6,color:'rgba(255,255,255,0.85)'}}
           />
           <div style={{fontSize:11,color:'rgba(255,255,255,0.2)',marginTop:8,textAlign:'right'}}>{text.length} characters</div>
         </div>
@@ -1537,10 +1571,11 @@ function HomeScreen({accent,unit,userName,historyData,muscleSets,weekChart,routi
 }
 
 // ─── History Screen ───────────────────────────────────────────
-function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
+function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit,onDeleteWorkout}){
   const rgb=h2r(accent);
   const [expanded,setExpanded]=React.useState({});
   const [chartEx,setChartEx]=React.useState(null);
+  const [confirmDelete,setConfirmDelete]=React.useState(null);
   const toggle=id=>setExpanded(p=>({...p,[id]:!p[id]}));
   if(!historyData.length) return(
     <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:'58px 32px 90px'}}>
@@ -1568,7 +1603,7 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
               const isOpen=expanded[id];const hasPR=s.exercises.some(e=>e.pr);const pc=MC[s.muscles[0]]||accent;
               return(
                 <div key={id} style={{marginBottom:8,background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.055)',borderRadius:20,overflow:'hidden'}}>
-                  <div onClick={()=>toggle(id)} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',cursor:'pointer'}} onClick={()=>toggle(id)}>
                     <div style={{width:40,height:40,borderRadius:13,flexShrink:0,background:`${pc}18`,border:`1px solid ${pc}28`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:pc}}>{s.routine[0]}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:4}}>
@@ -1582,6 +1617,9 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
                     <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3,flexShrink:0}}>
                       <span style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,0.5)'}}>{s.duration}</span>
                       <span style={{fontSize:11,color:'rgba(255,255,255,0.22)'}}>{s.sets} sets</span>
+                    </div>
+                    <div onClick={e=>{e.stopPropagation();haptic('light');setConfirmDelete(id);}} style={{width:30,height:30,borderRadius:9,background:'rgba(244,63,94,0.08)',border:'1px solid rgba(244,63,94,0.18)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,marginLeft:4}}>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="#f43f5e" strokeWidth="1.5" strokeLinecap="round"/></svg>
                     </div>
                     <svg width="8" height="13" viewBox="0 0 8 13" style={{flexShrink:0,transition:'transform 0.2s',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}><path d="M1 1l6 5.5L1 12" stroke="rgba(255,255,255,0.18)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
@@ -1626,6 +1664,22 @@ function HistoryScreen({accent,historyData,historyWeeks,progressionData,unit}){
         ))}
       </div>
       {chartEx&&<ProgressionSheet exerciseName={chartEx} accent={accent} unit={unit} onClose={()=>setChartEx(null)} progressionData={progressionData}/>}
+      {confirmDelete&&(
+        <div style={{position:'absolute',inset:0,zIndex:500,display:'flex',alignItems:'flex-end',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)'}}>
+          <div style={{width:'100%',background:'#161616',borderRadius:'28px 28px 0 0',padding:'28px 22px 48px',border:'1px solid rgba(255,255,255,0.07)',borderBottom:'none'}}>
+            <div style={{fontSize:20,fontWeight:700,color:'#fff',marginBottom:8,letterSpacing:-0.5}}>Delete workout?</div>
+            <div style={{fontSize:14,color:'rgba(255,255,255,0.35)',marginBottom:28,lineHeight:1.5}}>This can't be undone.</div>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div onClick={()=>{haptic('medium');onDeleteWorkout&&onDeleteWorkout(confirmDelete);setConfirmDelete(null);}} style={{height:52,borderRadius:16,background:'rgba(244,63,94,0.15)',border:'1px solid rgba(244,63,94,0.3)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                <span style={{fontSize:16,fontWeight:700,color:'#f43f5e'}}>Yes, Delete</span>
+              </div>
+              <div onClick={()=>setConfirmDelete(null)} style={{height:52,borderRadius:16,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                <span style={{fontSize:16,fontWeight:600,color:'rgba(255,255,255,0.4)'}}>Cancel</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2103,7 +2157,7 @@ function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
             </Row>
             <Row label="Beam Intensity" sub={`Ambient glow — ${tw.beamIntensity}%`} last>
               <div style={{display:'flex',alignItems:'center',gap:10,width:140,flexShrink:0}}>
-                <input type="range" min="0" max="100" value={tw.beamIntensity} onChange={e=>onTwChange({...tw,beamIntensity:+e.target.value})} style={{flex:1,accentColor:accent,cursor:'pointer'}}/>
+                <input type="range" min="0" max="100" value={tw.beamIntensity} onChange={e=>{hapticSelect();onTwChange({...tw,beamIntensity:+e.target.value});}} style={{flex:1,accentColor:accent,cursor:'pointer'}}/>
                 <span style={{fontSize:12,fontWeight:600,color:accent,minWidth:30,textAlign:'right'}}>{tw.beamIntensity}%</span>
               </div>
             </Row>
@@ -2124,7 +2178,7 @@ function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
                   <div style={{fontSize:11.5,color:'rgba(255,255,255,0.28)'}}>Seconds between sets</div>
                 </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {timerOptions.map(s=>{const sel=tw.restTimerDuration===s;const sr=h2r(accent);return <div key={s} onClick={()=>onTwChange({...tw,restTimerDuration:s})} style={{padding:'6px 14px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${sr},0.2)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${sr},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)',transition:'all 0.15s'}}>{s}s</div>;})}
+                  {timerOptions.map(s=>{const sel=tw.restTimerDuration===s;const sr=h2r(accent);return <div key={s} onClick={()=>{haptic('light');onTwChange({...tw,restTimerDuration:s});}} style={{padding:'7px 16px',borderRadius:20,cursor:'pointer',background:sel?`rgba(${sr},0.2)`:'rgba(255,255,255,0.05)',border:sel?`1px solid rgba(${sr},0.35)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,fontWeight:700,color:sel?accent:'rgba(255,255,255,0.35)',transition:'all 0.15s'}}>{s}s</div>;})}
                 </div>
               </div>
             )}
@@ -2142,7 +2196,7 @@ function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
             <Row label="Rate Dialed" last><div style={{display:'flex',gap:2}}>{[...Array(5)].map((_,i)=><span key={i} style={{fontSize:14,color:accent}}>★</span>)}</div></Row>
           </div>
         </div>
-        <div style={{height:50,borderRadius:16,background:'rgba(244,63,94,0.07)',border:'1px solid rgba(244,63,94,0.15)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+        <div onClick={async()=>{haptic('medium');await supabase.auth.signOut();}} style={{height:50,borderRadius:16,background:'rgba(244,63,94,0.07)',border:'1px solid rgba(244,63,94,0.15)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
           <span style={{fontSize:15,fontWeight:600,color:'#f43f5e'}}>Sign Out</span>
         </div>
       </div>
@@ -2150,61 +2204,7 @@ function SettingsScreen({accent,tw,onTwChange,workoutCount,streak}){
   );
 }
 
-// ─── App Root ─────────────────────────────────────────────────
-export default function App(){
-  const loadState=()=>{try{return JSON.parse(localStorage.getItem('dialed_v4')||'null');}catch(e){return null;}};
-  const saved=loadState();
 
-  const [onboarded,setOnboarded]=React.useState(!!saved?.onboarded);
-  const [tw,setTw]=React.useState({...TWEAK_DEFAULTS,...(saved?.tw||{})});
-  const [tab,setTab]=React.useState(saved?.tab||'home');
-  const [routines,setRoutines]=React.useState(saved?.routines||[]);
-  const [historyData,setHistoryData]=React.useState(saved?.historyData||[]);
-  const [bwLog,setBwLog]=React.useState(saved?.bwLog||[]);
-  const [customExercises,setCustomExercises]=React.useState(saved?.customExercises||[]);
-  const [progressionData,setProgressionData]=React.useState(saved?.progressionData||{});
-  const [schedules,setSchedules]=React.useState(saved?.schedules||[]);
-
-  const [openRoutine,setOpenRoutine]=React.useState(null);
-  const [activeWorkout,setActiveWorkout]=React.useState(null);
-  const [editingRoutine,setEditingRoutine]=React.useState(null);
-  const [creatingRoutine,setCreatingRoutine]=React.useState(false);
-  const [showBWChart,setShowBWChart]=React.useState(false);
-
-  const accent=THEMES[tw.theme]?.p||'#7dd3fc';
-
-  // Use a ref so persist() always reads the latest state, never stale closure values
-  const stateRef = React.useRef({});
-  React.useEffect(()=>{
-    stateRef.current = {tw,tab,routines,historyData,bwLog,customExercises,progressionData,schedules};
-  });
-  const persist=(updates={})=>{
-    const state={onboarded:true,...stateRef.current,...updates};
-    localStorage.setItem('dialed_v4',JSON.stringify(state));
-  };
-
-  const saveTw=t=>{setTw(t);persist({tw:t});};
-  const changeTab=id=>{setTab(id);persist({tab:id});};
-
-  const handleOnboardingComplete=({name,unit,theme,usePresets})=>{
-    const newTw={...TWEAK_DEFAULTS,unit,theme,userName:name};
-    setTw(newTw);
-    // Always start with blank data — no mock history, no fake PRs, no demo bodyweight
-    const startRoutines=usePresets?DEFAULT_ROUTINES:[];
-    setRoutines(startRoutines);
-    setHistoryData([]);
-    setBwLog([]);
-    setProgressionData({});
-    setOnboarded(true);
-    persist({onboarded:true,tw:newTw,historyData:[],bwLog:[],progressionData:{},routines:startRoutines});
-  };
-
-  const handleSaveRoutine=r=>{
-    const updated=routines.find(x=>x.id===r.id)?routines.map(x=>x.id===r.id?r:x):[...routines,r];
-    setRoutines(updated);
-    persist({routines:updated});
-    setEditingRoutine(null);setCreatingRoutine(false);
-  };
 
   const handleDeleteRoutine=id=>{
     const updated=routines.filter(r=>r.id!==id);
@@ -2227,10 +2227,12 @@ export default function App(){
 
   const handleWorkoutEnd=({discard,updatedRoutine,completedWorkout})=>{
     if(!discard && completedWorkout){
+      const now=new Date();
+      const localISO=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const newEntry={
         id:`h${Date.now()}`,
-        date: new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
-        dateISO: new Date().toISOString().split('T')[0],
+        date: now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
+        dateISO: localISO,
         routine: completedWorkout.routineName,
         muscles: completedWorkout.muscles,
         duration: completedWorkout.duration,
@@ -2246,7 +2248,7 @@ export default function App(){
         if(ex.bestWeight>0&&ex.bestReps>0){
           if(!newProgression[ex.name]) newProgression[ex.name]=[];
           newProgression[ex.name]=[...newProgression[ex.name],{
-            date:new Date().toISOString().split('T')[0],
+            date:localISO,
             weight:ex.bestWeight,
             reps:ex.bestReps,
             volume:ex.totalVolume,
@@ -2278,6 +2280,12 @@ export default function App(){
   const handleSaveCustomExercise=ex=>{
     const updated=[...customExercises,ex];
     setCustomExercises(updated);persist({customExercises:updated});
+  };
+
+  const handleDeleteWorkout=id=>{
+    const updated=historyData.filter(h=>h.id!==id);
+    setHistoryData(updated);
+    persist({historyData:updated});
   };
 
   // ─── Derived from real history ────────────────────────────
@@ -2410,22 +2418,397 @@ export default function App(){
     return prs;
   }, [historyData]);
 
+// ─── Auth Screen ──────────────────────────────────────────────
+function AuthScreen({ accent }) {
+  const [mode, setMode] = React.useState('landing');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [success, setSuccess] = React.useState('');
+  const rgb = h2r(accent);
+
+  const handleGoogle = async () => {
+    setLoading(true); setError('');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+    if (error) { setError(error.message); setLoading(false); }
+  };
+
+  const handleEmailSignIn = async () => {
+    if (!email || !password) return setError('Enter your email and password.');
+    setLoading(true); setError('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { setError(error.message); setLoading(false); }
+  };
+
+  const handleEmailSignUp = async () => {
+    if (!email || !password) return setError('Enter your email and password.');
+    if (password.length < 6) return setError('Password must be at least 6 characters.');
+    setLoading(true); setError('');
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) { setError(error.message); setLoading(false); }
+    else { setSuccess('Check your email to confirm your account!'); setLoading(false); }
+  };
+
+  const inputStyle = {
+    width: '100%', background: 'rgba(255,255,255,0.06)',
+    border: `1px solid rgba(${rgb},0.25)`, borderRadius: 14,
+    padding: '15px 18px', fontSize: 16, fontWeight: 500,
+    color: '#fff', outline: 'none', fontFamily: 'Outfit,sans-serif',
+    boxSizing: 'border-box',
+  };
+  const btnPrimary = {
+    width: '100%', padding: '15px 18px', borderRadius: 14,
+    background: accent, border: 'none', color: '#000',
+    fontSize: 16, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+    opacity: loading ? 0.6 : 1, fontFamily: 'Outfit,sans-serif', transition: 'opacity 0.2s',
+  };
+  const btnSecondary = {
+    width: '100%', padding: '15px 18px', borderRadius: 14,
+    background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+    color: '#fff', fontSize: 16, fontWeight: 600,
+    cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'Outfit,sans-serif',
+  };
+
+  return (
+    <div style={{ position:'absolute', inset:0, zIndex:500, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'0 32px', overflowY:'auto' }}>
+      <div style={{ position:'absolute', top:'15%', left:'50%', transform:'translateX(-50%)', width:300, height:300, borderRadius:'50%', background:`rgba(${rgb},0.12)`, filter:'blur(80px)', pointerEvents:'none' }}/>
+      <div style={{ width:'100%', position:'relative', zIndex:1 }}>
+        {mode === 'landing' && (
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:52, marginBottom:16 }}>⚡</div>
+            <div style={{ fontSize:36, fontWeight:800, color:'#fff', letterSpacing:-1.5, marginBottom:48, lineHeight:1.1 }}>Dialed</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <button onClick={handleGoogle} style={btnSecondary}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+                  <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 33.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.3-.1-2.7-.1-4z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 19 13 24 13c3.1 0 5.8 1.1 7.9 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4c-7.7 0-14.4 4.4-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.9 13.5-5l-6.2-5.2C29.5 35.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.5 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20H24v8h11.3c-.9 2.5-2.6 4.6-4.8 6l6.2 5.2C40.3 35.7 44 30.3 44 24c0-1.3-.1-2.7-.4-4z"/></svg>
+                  Continue with Google
+                </div>
+              </button>
+              <div style={{ display:'flex', alignItems:'center', gap:12, margin:'4px 0' }}>
+                <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.1)' }}/>
+                <span style={{ fontSize:12, color:'rgba(255,255,255,0.25)', fontWeight:500 }}>or</span>
+                <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.1)' }}/>
+              </div>
+              <button onClick={()=>{setMode('email-signin');setError('');}} style={btnPrimary}>Continue with Email</button>
+              <button onClick={()=>{setMode('email-signup');setError('');}} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.35)', fontSize:14, cursor:'pointer', fontFamily:'Outfit,sans-serif', marginTop:4 }}>
+                Don't have an account? <span style={{ color:accent }}>Sign up</span>
+              </button>
+            </div>
+          </div>
+        )}
+        {mode === 'email-signin' && (
+          <div>
+            <button onClick={()=>{setMode('landing');setError('');}} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.4)', fontSize:14, cursor:'pointer', fontFamily:'Outfit,sans-serif', marginBottom:24, padding:0, display:'flex', alignItems:'center', gap:6 }}>← Back</button>
+            <div style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing:-1, marginBottom:28 }}>Sign in</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <input style={inputStyle} type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEmailSignIn()} autoFocus/>
+              <input style={inputStyle} type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEmailSignIn()}/>
+              {error && <div style={{ fontSize:13, color:'#f87171', textAlign:'center' }}>{error}</div>}
+              <button onClick={handleEmailSignIn} style={{ ...btnPrimary, marginTop:4 }} disabled={loading}>{loading?'Signing in...':'Sign In'}</button>
+              <button onClick={()=>{setMode('email-signup');setError('');}} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.35)', fontSize:14, cursor:'pointer', fontFamily:'Outfit,sans-serif', textAlign:'center' }}>
+                Don't have an account? <span style={{ color:accent }}>Sign up</span>
+              </button>
+            </div>
+          </div>
+        )}
+        {mode === 'email-signup' && (
+          <div>
+            <button onClick={()=>{setMode('landing');setError('');}} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.4)', fontSize:14, cursor:'pointer', fontFamily:'Outfit,sans-serif', marginBottom:24, padding:0, display:'flex', alignItems:'center', gap:6 }}>← Back</button>
+            <div style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing:-1, marginBottom:28 }}>Create account</div>
+            {success ? (
+              <div style={{ background:`rgba(${rgb},0.1)`, border:`1px solid rgba(${rgb},0.3)`, borderRadius:14, padding:'20px 18px', textAlign:'center' }}>
+                <div style={{ fontSize:32, marginBottom:10 }}>📬</div>
+                <div style={{ fontSize:15, color:'#fff', fontWeight:600, marginBottom:6 }}>Check your email</div>
+                <div style={{ fontSize:13, color:'rgba(255,255,255,0.45)' }}>We sent a confirmation link to <strong>{email}</strong></div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                <input style={inputStyle} type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} autoFocus/>
+                <input style={inputStyle} type="password" placeholder="Password (min 6 characters)" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEmailSignUp()}/>
+                {error && <div style={{ fontSize:13, color:'#f87171', textAlign:'center' }}>{error}</div>}
+                <button onClick={handleEmailSignUp} style={{ ...btnPrimary, marginTop:4 }} disabled={loading}>{loading?'Creating account...':'Create Account'}</button>
+                <button onClick={()=>{setMode('email-signin');setError('');}} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.35)', fontSize:14, cursor:'pointer', fontFamily:'Outfit,sans-serif', textAlign:'center' }}>
+                  Already have an account? <span style={{ color:accent }}>Sign in</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── App Root ─────────────────────────────────────────────────
+export default function App(){
+  const [session, setSession] = React.useState(undefined);
+
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const storageKey = session ? `dialed_v4_${session.user.id}` : 'dialed_v4';
+  const loadState = () => { try { return JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch(e) { return null; } };
+
+  const [onboarded, setOnboarded] = React.useState(false);
+  const [tw, setTw] = React.useState(TWEAK_DEFAULTS);
+  const [tab, setTab] = React.useState('home');
+  const [routines, setRoutines] = React.useState([]);
+  const [historyData, setHistoryData] = React.useState([]);
+  const [bwLog, setBwLog] = React.useState([]);
+  const [customExercises, setCustomExercises] = React.useState([]);
+  const [progressionData, setProgressionData] = React.useState({});
+  const [schedules, setSchedules] = React.useState([]);
+
+  React.useEffect(() => {
+    if (session === undefined) return;
+    const saved = loadState();
+    if (saved) {
+      setOnboarded(!!saved.onboarded);
+      setTw({ ...TWEAK_DEFAULTS, ...(saved.tw || {}) });
+      setTab(saved.tab || 'home');
+      setRoutines(saved.routines || []);
+      setHistoryData(saved.historyData || []);
+      setBwLog(saved.bwLog || []);
+      setCustomExercises(saved.customExercises || []);
+      setProgressionData(saved.progressionData || {});
+      setSchedules(saved.schedules || []);
+    }
+    if (session?.user?.id) {
+      pullFromCloud(session.user.id).then(cloud => {
+        if (!cloud) return;
+        if (cloud.routines.length > 0 || cloud.historyData.length > 0 || cloud.tw) {
+          if (cloud.tw) setTw(prev => ({ ...TWEAK_DEFAULTS, ...cloud.tw }));
+          if (cloud.routines.length > 0) setRoutines(cloud.routines);
+          if (cloud.historyData.length > 0) setHistoryData(cloud.historyData);
+          if (Object.keys(cloud.progressionData).length > 0) setProgressionData(cloud.progressionData);
+          if (cloud.bwLog.length > 0) setBwLog(cloud.bwLog);
+          if (cloud.schedules.length > 0) setSchedules(cloud.schedules);
+          setOnboarded(true);
+          localStorage.setItem(storageKey, JSON.stringify({ onboarded:true, tw:cloud.tw||saved?.tw, routines:cloud.routines, historyData:cloud.historyData, progressionData:cloud.progressionData, bwLog:cloud.bwLog, schedules:cloud.schedules, customExercises:saved?.customExercises||[], tab:saved?.tab||'home' }));
+        }
+      });
+    }
+  }, [session]);
+
+  const [openRoutine, setOpenRoutine] = React.useState(null);
+  const [activeWorkout, setActiveWorkout] = React.useState(null);
+  const [editingRoutine, setEditingRoutine] = React.useState(null);
+  const [creatingRoutine, setCreatingRoutine] = React.useState(false);
+  const [showBWChart, setShowBWChart] = React.useState(false);
+
+  const accent = THEMES[tw.theme]?.p || '#7dd3fc';
+
+  const stateRef = React.useRef({});
+  React.useEffect(() => {
+    stateRef.current = { tw, tab, routines, historyData, bwLog, customExercises, progressionData, schedules };
+  });
+
+  const persist = (updates = {}) => {
+    const state = { onboarded:true, ...stateRef.current, ...updates };
+    localStorage.setItem(storageKey, JSON.stringify(state));
+    if (session?.user?.id) {
+      const merged = { ...stateRef.current, ...updates };
+      pushToCloud(session.user.id, { tw:merged.tw, routines:merged.routines, historyData:merged.historyData, progressionData:merged.progressionData, bwLog:merged.bwLog, schedules:merged.schedules });
+    }
+  };
+
+  const saveTw = t => { setTw(t); persist({ tw:t }); };
+  const changeTab = id => { setTab(id); persist({ tab:id }); };
+
+  const handleOnboardingComplete = ({ name, unit, theme, usePresets }) => {
+    const newTw = { ...TWEAK_DEFAULTS, unit, theme, userName:name };
+    setTw(newTw);
+    const startRoutines = usePresets ? DEFAULT_ROUTINES : [];
+    setRoutines(startRoutines);
+    setHistoryData([]); setBwLog([]); setProgressionData({});
+    setOnboarded(true);
+    persist({ onboarded:true, tw:newTw, historyData:[], bwLog:[], progressionData:{}, routines:startRoutines });
+  };
+
+  const handleSaveRoutine = r => {
+    const updated = routines.find(x => x.id === r.id) ? routines.map(x => x.id === r.id ? r : x) : [...routines, r];
+    setRoutines(updated); persist({ routines:updated });
+    setEditingRoutine(null); setCreatingRoutine(false);
+  };
+  const handleDeleteRoutine = id => {
+    const updated = routines.filter(r => r.id !== id);
+    setRoutines(updated); persist({ routines:updated }); setEditingRoutine(null);
+  };
+  const handleSaveSchedule = sched => {
+    const updated = schedules.find(s => s.id === sched.id) ? schedules.map(s => s.id === sched.id ? sched : s) : [...schedules, sched];
+    setSchedules(updated); persist({ schedules:updated });
+  };
+  const handleDeleteSchedule = id => {
+    const updated = schedules.filter(s => s.id !== id);
+    setSchedules(updated); persist({ schedules:updated });
+  };
+
+  const handleWorkoutEnd = ({ discard, updatedRoutine, completedWorkout }) => {
+    if (!discard && completedWorkout) {
+      const now = new Date();
+      const localISO = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const newEntry = {
+        id: `h${Date.now()}`,
+        date: now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }),
+        dateISO: localISO,
+        routine: completedWorkout.routineName,
+        muscles: completedWorkout.muscles,
+        duration: completedWorkout.duration,
+        volume: completedWorkout.volume,
+        sets: completedWorkout.totalSets,
+        exercises: completedWorkout.exercises,
+      };
+      const updatedHistory = [newEntry, ...historyData];
+      setHistoryData(updatedHistory);
+      const newProgression = { ...progressionData };
+      completedWorkout.exercises.forEach(ex => {
+        if (ex.bestWeight > 0 && ex.bestReps > 0) {
+          if (!newProgression[ex.name]) newProgression[ex.name] = [];
+          newProgression[ex.name] = [...newProgression[ex.name], { date:localISO, weight:ex.bestWeight, reps:ex.bestReps, volume:ex.totalVolume }];
+        }
+      });
+      setProgressionData(newProgression);
+      if (updatedRoutine) {
+        const updatedR = routines.map(r => r.id === updatedRoutine.id ? updatedRoutine : r);
+        setRoutines(updatedR);
+        persist({ historyData:updatedHistory, progressionData:newProgression, routines:updatedR });
+      } else {
+        persist({ historyData:updatedHistory, progressionData:newProgression });
+      }
+    } else if (updatedRoutine) {
+      const updatedR = routines.map(r => r.id === updatedRoutine.id ? updatedRoutine : r);
+      setRoutines(updatedR); persist({ routines:updatedR });
+    }
+    setActiveWorkout(null);
+  };
+
+  const handleAddBW = weight => {
+    const now = new Date();
+    const localISO = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const entry = { date:localISO, weight };
+    const updated = [...bwLog, entry];
+    setBwLog(updated); persist({ bwLog:updated });
+  };
+
+  const handleSaveCustomExercise = ex => {
+    const updated = [...customExercises, ex];
+    setCustomExercises(updated); persist({ customExercises:updated });
+  };
+
+  const handleDeleteWorkout = id => {
+    const updated = historyData.filter(h => h.id !== id);
+    setHistoryData(updated); persist({ historyData:updated });
+  };
+
+  // ── Derived data ──
+  const weekChart = React.useMemo(() => {
+    const days = ['S','M','T','W','T','F','S'];
+    const dow = new Date().getDay();
+    return Array.from({ length:7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (dow - i + 7) % 7);
+      const now = d;
+      const key = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const v = historyData.filter(s => s.dateISO === key).reduce((a, s) => a + (s.volume || 0), 0);
+      return { d:days[i], v, today:i === dow };
+    });
+  }, [historyData]);
+
+  const muscleSets = React.useMemo(() => {
+    const counts = {};
+    historyData.forEach(session => {
+      (session.exercises || []).forEach(ex => {
+        const exInfo = ALL_EXERCISES.find(e => e.name === ex.name);
+        const muscle = exInfo?.muscle || 'Full Body';
+        counts[muscle] = (counts[muscle] || 0) + (ex.sets?.length || 0);
+      });
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n, s]) => ({ n, s }));
+  }, [historyData]);
+
+  const historyWeeks = React.useMemo(() => {
+    if (!historyData.length) return [];
+    const today = new Date();
+    const todayISO = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate() - today.getDay());
+    const startOfLastWeek = new Date(startOfWeek); startOfLastWeek.setDate(startOfWeek.getDate() - 7);
+    const swISO = `${startOfWeek.getFullYear()}-${String(startOfWeek.getMonth()+1).padStart(2,'0')}-${String(startOfWeek.getDate()).padStart(2,'0')}`;
+    const slwISO = `${startOfLastWeek.getFullYear()}-${String(startOfLastWeek.getMonth()+1).padStart(2,'0')}-${String(startOfLastWeek.getDate()).padStart(2,'0')}`;
+    const thisWeek = [], lastWeek = [], older = [];
+    historyData.forEach(s => {
+      const iso = s.dateISO;
+      if (!iso) { thisWeek.push(s); return; }
+      if (iso >= swISO) thisWeek.push(s);
+      else if (iso >= slwISO) lastWeek.push(s);
+      else older.push(s);
+    });
+    const makeWeek = (label, sessions) => sessions.length === 0 ? null : ({ label, ids:sessions.map(s => s.id), vol:sessions.reduce((a, s) => a + (s.volume || 0), 0), workouts:sessions.length });
+    return [makeWeek('This Week', thisWeek), makeWeek('Last Week', lastWeek), older.length ? makeWeek('Earlier', older) : null].filter(Boolean);
+  }, [historyData]);
+
+  const calWorkouts = React.useMemo(() => {
+    const map = {};
+    historyData.forEach(s => {
+      if (s.dateISO) map[s.dateISO] = { routine:s.routine, muscles:s.muscles, volume:s.volume||0, duration:s.duration, sets:s.sets, pr:s.exercises?.some(e => e.pr)||false };
+    });
+    return map;
+  }, [historyData]);
+
+  const prsData = React.useMemo(() => {
+    const prs = []; const seen = new Set();
+    historyData.forEach(s => {
+      (s.exercises || []).forEach(ex => {
+        if (ex.pr && !seen.has(ex.name)) {
+          seen.add(ex.name);
+          const best = ex.sets?.reduce((a, set) => set.w > a.w ? set : a, ex.sets[0]);
+          const exInfo = ALL_EXERCISES.find(e => e.name === ex.name);
+          prs.push({ exercise:ex.name, weight:best?.w||0, reps:best?.r||0, date:s.dateISO||'', muscle:exInfo?.muscle||'Full Body' });
+        }
+      });
+    });
+    return prs;
+  }, [historyData]);
+
   const currentStreak = React.useMemo(() => {
-    if(!historyData.length) return 0;
-    const dateSet = new Set(historyData.map(s => s.dateISO || s.date?.replace(/^Today,\s*/i, new Date().toISOString().split('T')[0]).replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*/i,'')));
+    if (!historyData.length) return 0;
+    const dateSet = new Set(historyData.map(s => s.dateISO).filter(Boolean));
     let count = 0;
     const d = new Date();
-    while(true){
-      const key = d.toISOString().split('T')[0];
-      if(dateSet.has(key)){ count++; d.setDate(d.getDate()-1); }
+    while (true) {
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      if (dateSet.has(key)) { count++; d.setDate(d.getDate() - 1); }
       else break;
     }
     return count;
   }, [historyData]);
 
-  if(!onboarded){
-    return(
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}>
+  // ── Render ──
+  if (session === undefined) {
+    return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#0a0a0a' }}><div style={{ fontSize:32 }}>⚡</div></div>;
+  }
+
+  if (!session) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+        <PhoneFrame>
+          <BeamsCanvas accent="#7dd3fc" intensity={50}/>
+          <FilmGrain/>
+          <StatusBar/>
+          <AuthScreen accent="#7dd3fc"/>
+        </PhoneFrame>
+      </div>
+    );
+  }
+
+  if (!onboarded) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
         <PhoneFrame>
           <BeamsCanvas accent={accent} intensity={50}/>
           <FilmGrain/>
@@ -2436,25 +2819,22 @@ export default function App(){
     );
   }
 
-  return(
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}>
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
       <PhoneFrame>
         <BeamsCanvas accent={accent} intensity={tw.beamIntensity}/>
         <FilmGrain/>
         <StatusBar/>
 
         {tab==='home'&&<HomeScreen accent={accent} unit={tw.unit} userName={tw.userName} historyData={historyData} muscleSets={muscleSets} weekChart={weekChart} routines={routines} onRoutineTap={r=>setOpenRoutine(r)} onStartPlan={()=>{const dow=new Date().getDay();const todaySched=schedules.find(s=>s.days.includes(dow));const r=todaySched?routines.find(x=>x.name===todaySched.routineName):routines[0];if(r)setActiveWorkout(r);}} onQuickStart={()=>setActiveWorkout({name:'Free Workout',muscles:['Full Body'],exercises:[],id:null})} onOpenBW={()=>setShowBWChart(true)} bwLog={bwLog} onNewRoutine={()=>setCreatingRoutine(true)} todaySchedule={schedules.find(s=>s.days.includes(new Date().getDay()))}/>}
-        {tab==='history'&&<HistoryScreen accent={accent} historyData={historyData} historyWeeks={historyWeeks} progressionData={progressionData} unit={tw.unit}/>}
+        {tab==='history'&&<HistoryScreen accent={accent} historyData={historyData} historyWeeks={historyWeeks} progressionData={progressionData} unit={tw.unit} onDeleteWorkout={handleDeleteWorkout}/>}
         {tab==='calendar'&&<CalendarScreen accent={accent} calWorkouts={calWorkouts} routines={routines} schedules={schedules} onSaveSchedule={handleSaveSchedule} onDeleteSchedule={handleDeleteSchedule} currentStreak={currentStreak}/>}
         {tab==='awards'&&<AwardsScreen accent={accent} prsData={prsData} historyData={historyData} currentStreak={currentStreak}/>}
         {tab==='settings'&&<SettingsScreen accent={accent} tw={tw} onTwChange={saveTw} workoutCount={historyData.length} streak={currentStreak}/>}
 
         {openRoutine&&<RoutineSheet r={openRoutine} accent={accent} onClose={()=>setOpenRoutine(null)} onStart={r=>{setOpenRoutine(null);setActiveWorkout(r);}} onEdit={r=>{setEditingRoutine(r);}}/>}
-
         {activeWorkout&&<WorkoutScreen routine={activeWorkout} accent={accent} onEnd={handleWorkoutEnd} restTimerEnabled={tw.restTimerEnabled} restTimerDuration={tw.restTimerDuration} progressionData={progressionData} customExercises={customExercises} historyData={historyData} onSaveCustomExercise={handleSaveCustomExercise} unit={tw.unit} userName={tw.userName}/>}
-
         {(editingRoutine||creatingRoutine)&&<RoutineBuilder accent={accent} existing={editingRoutine||null} onClose={()=>{setEditingRoutine(null);setCreatingRoutine(false);}} onSave={handleSaveRoutine} onDelete={handleDeleteRoutine} customExercises={customExercises} onSaveCustomExercise={handleSaveCustomExercise}/>}
-
         {showBWChart&&<BodyweightSheet accent={accent} unit={tw.unit} bwLog={bwLog} onClose={()=>setShowBWChart(false)} onAdd={handleAddBW}/>}
 
         <BottomNav tab={tab} setTab={changeTab} accent={accent}/>
