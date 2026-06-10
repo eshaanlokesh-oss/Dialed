@@ -9,20 +9,20 @@ import { pushToCloud, pullFromCloud } from './sync.js';
 // ─── Native detection & haptics ───────────────────────────────
 const isNative = () => !!(window.Capacitor?.isNativePlatform?.());
 const haptic = async (style = 'medium') => {
-  if (!isNative()) return;
   try {
-    // @ts-ignore
-    const mod = await import(/* @vite-ignore */ '@capacitor/haptics');
-    const s = style === 'light' ? mod.ImpactStyle.Light : style === 'heavy' ? mod.ImpactStyle.Heavy : mod.ImpactStyle.Medium;
-    await mod.Haptics.impact({ style: s });
+    if (!isNative()) return;
+    const Plugins = window.Capacitor?.Plugins;
+    if (!Plugins?.Haptics) return;
+    const s = style === 'light' ? 'LIGHT' : style === 'heavy' ? 'HEAVY' : 'MEDIUM';
+    await Plugins.Haptics.impact({ style: s });
   } catch(e) {}
 };
 const hapticSelect = async () => {
-  if (!isNative()) return;
   try {
-    // @ts-ignore
-    const mod = await import(/* @vite-ignore */ '@capacitor/haptics');
-    await mod.Haptics.selectionChanged();
+    if (!isNative()) return;
+    const Plugins = window.Capacitor?.Plugins;
+    if (!Plugins?.Haptics) return;
+    await Plugins.Haptics.selectionChanged();
   } catch(e) {}
 };
 
@@ -2610,19 +2610,12 @@ export default function App(){
     stateRef.current = { tw, tab, routines, historyData, bwLog, customExercises, progressionData, schedules };
   });
 
-const persist = (updates = {}) => {
+  const persist = (updates = {}) => {
     const state = { onboarded:true, ...stateRef.current, ...updates };
     localStorage.setItem(storageKey, JSON.stringify(state));
     if (session?.user?.id) {
       const merged = { ...stateRef.current, ...updates };
-      pushToCloud(session.user.id, {
-        tw: merged.tw || TWEAK_DEFAULTS,
-        routines: merged.routines || [],
-        historyData: merged.historyData || [],
-        progressionData: merged.progressionData || {},
-        bwLog: merged.bwLog || [],
-        schedules: merged.schedules || [],
-      });
+      pushToCloud(session.user.id, { tw:merged.tw, routines:merged.routines, historyData:merged.historyData, progressionData:merged.progressionData, bwLog:merged.bwLog, schedules:merged.schedules });
     }
   };
 
