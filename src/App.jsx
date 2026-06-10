@@ -2610,12 +2610,19 @@ export default function App(){
     stateRef.current = { tw, tab, routines, historyData, bwLog, customExercises, progressionData, schedules };
   });
 
-  const persist = (updates = {}) => {
+const persist = (updates = {}) => {
     const state = { onboarded:true, ...stateRef.current, ...updates };
     localStorage.setItem(storageKey, JSON.stringify(state));
     if (session?.user?.id) {
       const merged = { ...stateRef.current, ...updates };
-      pushToCloud(session.user.id, { tw:merged.tw, routines:merged.routines, historyData:merged.historyData, progressionData:merged.progressionData, bwLog:merged.bwLog, schedules:merged.schedules });
+      pushToCloud(session.user.id, {
+        tw: merged.tw || TWEAK_DEFAULTS,
+        routines: merged.routines || [],
+        historyData: merged.historyData || [],
+        progressionData: merged.progressionData || {},
+        bwLog: merged.bwLog || [],
+        schedules: merged.schedules || [],
+      });
     }
   };
 
