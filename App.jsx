@@ -2225,17 +2225,28 @@ function AuthScreen({ accent }) {
   const handleEmailSignIn = async () => {
     if (!email || !password) return setError('Enter your email and password.');
     setLoading(true); setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setError(error.message); setLoading(false); }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { setError(error.message); setLoading(false); }
+      // on success, onAuthStateChange swaps the screen
+    } catch(e) {
+      setError('Something went wrong. Check your connection and try again.');
+      setLoading(false);
+    }
   };
 
   const handleEmailSignUp = async () => {
     if (!email || !password) return setError('Enter your email and password.');
     if (password.length < 6) return setError('Password must be at least 6 characters.');
     setLoading(true); setError('');
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) { setError(error.message); setLoading(false); }
-    else { setSuccess('Check your email to confirm your account!'); setLoading(false); }
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) { setError(error.message); setLoading(false); }
+      else { setSuccess('Check your email to confirm your account!'); setLoading(false); }
+    } catch(e) {
+      setError('Something went wrong. Check your connection and try again.');
+      setLoading(false);
+    }
   };
 
   const inputStyle = {
@@ -2267,6 +2278,7 @@ function AuthScreen({ accent }) {
             <div style={{ fontSize:52, marginBottom:16 }}>⚡</div>
             <div style={{ fontSize:36, fontWeight:800, color:'#fff', letterSpacing:-1.5, marginBottom:48, lineHeight:1.1 }}>Dialed</div>
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              {!isNative() && (<>
               <button onClick={handleGoogle} style={btnSecondary}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
                   <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 33.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.3-.1-2.7-.1-4z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 19 13 24 13c3.1 0 5.8 1.1 7.9 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4c-7.7 0-14.4 4.4-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.9 13.5-5l-6.2-5.2C29.5 35.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.5 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20H24v8h11.3c-.9 2.5-2.6 4.6-4.8 6l6.2 5.2C40.3 35.7 44 30.3 44 24c0-1.3-.1-2.7-.4-4z"/></svg>
@@ -2278,6 +2290,7 @@ function AuthScreen({ accent }) {
                 <span style={{ fontSize:12, color:'rgba(255,255,255,0.25)', fontWeight:500 }}>or</span>
                 <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.1)' }}/>
               </div>
+              </>)}
               <button onClick={()=>{setMode('email-signin');setError('');}} style={btnPrimary}>Continue with Email</button>
               <button onClick={()=>{setMode('email-signup');setError('');}} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.35)', fontSize:14, cursor:'pointer', fontFamily:'Outfit,sans-serif', marginTop:4 }}>
                 Don't have an account? <span style={{ color:accent }}>Sign up</span>
