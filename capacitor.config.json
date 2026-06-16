@@ -1,5 +1,9 @@
 {
-  "appId": "com.dialed.app",
+  "appId": "com.eshaanlokesh.dialed",
   "appName": "Dialed",
-  "webDir": "dist"
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false
+  }
 }

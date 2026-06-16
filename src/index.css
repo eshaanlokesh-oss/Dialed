@@ -6,6 +6,16 @@ html, body, #root {
   min-height: 100dvh;
 }
 
+html, body {
+  /* Lock the page so the whole view can't rubber-band up/down on iOS.
+     Individual scrollable areas inside the app handle their own scrolling. */
+  position: fixed;
+  overflow: hidden;
+  width: 100%;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+}
+
 body {
   background: #050a07;
   font-family: 'Outfit', sans-serif;
@@ -17,6 +27,7 @@ body {
 /* On wide screens (web preview), center the phone mockup.
    On narrow screens / native, let the app fill the viewport. */
 @media (min-width: 431px) {
+  html, body { position: static; overflow: auto; }
   body {
     display: flex;
     align-items: center;
@@ -26,6 +37,14 @@ body {
 
 #root {
   width: 100%;
+  overflow: hidden;
+}
+
+/* Scrollable regions inside the app: allow scroll, kill the bounce */
+.dialed-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 ::-webkit-scrollbar { display: none; }
