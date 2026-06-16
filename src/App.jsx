@@ -90,6 +90,7 @@ function FilmGrain(){
 }
 
 function StatusBar(){
+  if(isNative()) return null;
   const t=new Date(); const time=`${t.getHours()%12||12}:${String(t.getMinutes()).padStart(2,'0')}`;
   return(
     <div style={{position:'absolute',top:0,left:0,right:0,height:54,zIndex:20,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 28px 0',pointerEvents:'none'}}>
@@ -1367,10 +1368,11 @@ const NAV=[
   {id:'settings',draw:c=><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="3" stroke={c} strokeWidth="1.8"/><path d="M9.1 2.3L8 5.1 5.4 4 3.4 6.6l2.1 2.3a6 6 0 000 4.2L3.4 15.4 5.4 18l2.6-1.1 1.1 2.8h3.8l1.1-2.8L16.6 18l2-2.6-2.1-2.3a6 6 0 000-4.2l2.1-2.3L16.6 4l-2.6 1.1L12.9 2.3z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/></svg>},
 ];
 function BottomNav({tab,setTab,accent}){
+  const safeBottom = isNative() ? 'env(safe-area-inset-bottom)' : '16px';
   return(
-    <div style={{position:'absolute',bottom:0,left:0,right:0,height:82,zIndex:40,background:'rgba(11,11,11,0.93)',backdropFilter:'blur(20px)',borderTop:'1px solid rgba(255,255,255,0.045)',display:'flex',alignItems:'center',paddingBottom:16}}>
+    <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:40,background:'rgba(11,11,11,0.93)',backdropFilter:'blur(20px)',borderTop:'1px solid rgba(255,255,255,0.045)',display:'flex',alignItems:'center',paddingTop:10,paddingBottom:`calc(10px + ${safeBottom})`}}>
       {NAV.map(n=>{const active=tab===n.id;const c=active?accent:'rgba(255,255,255,0.2)';return(
-        <div key={n.id} onClick={()=>setTab(n.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,cursor:'pointer',paddingTop:2}}>
+        <div key={n.id} onClick={()=>{hapticSelect();setTab(n.id);}} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,cursor:'pointer',paddingTop:2}}>
           {n.draw(c)}
           {active&&<div style={{width:5,height:5,borderRadius:3,background:accent}}/>}
         </div>
@@ -2349,8 +2351,8 @@ export default function App(){
     supabase.auth.getSession()
       .then(({ data: { session } }) => setSession(session))
       .catch(() => setSession(null));
-    // Fallback: if getSession hangs (can happen on native), fall through to auth after 4s
-    const timeout = setTimeout(() => setSession(s => s === undefined ? null : s), 4000);
+    // Fallback: if getSession never resolves (rare), fall through to auth after 8s
+    const timeout = setTimeout(() => setSession(s => s === undefined ? null : s), 8000);
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => { subscription.unsubscribe(); clearTimeout(timeout); };
   }, []);
