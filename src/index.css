@@ -1,13 +1,31 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-body {
-  background: #060606;
+html, body, #root {
+  height: 100%;
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: 100dvh;
+}
+
+body {
+  background: #050a07;
   font-family: 'Outfit', sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Respect iOS safe areas on notched devices */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* On wide screens (web preview), center the phone mockup.
+   On narrow screens / native, let the app fill the viewport. */
+@media (min-width: 431px) {
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+#root {
+  width: 100%;
 }
 
 ::-webkit-scrollbar { display: none; }

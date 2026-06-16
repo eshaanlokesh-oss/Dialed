@@ -105,7 +105,7 @@ function StatusBar(){
 const Lbl = ({children}) => <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.3,textTransform:'uppercase',marginBottom:14}}>{children}</div>;
 
 function PhoneFrame({children}){
-  if(isNative()) return <div style={{width:'100%',height:'100dvh',overflow:'hidden',background:'#0d0d0d',position:'relative'}}>{children}</div>;
+  if(isNative()) return <div style={{width:'100%',height:'100dvh',overflow:'hidden',background:'#050a07',position:'relative'}}>{children}</div>;
   return(
     <div style={{position:'relative',borderRadius:57,padding:11,background:'linear-gradient(150deg,#262626 0%,#0f0f0f 60%,#1a1a1a 100%)',boxShadow:'0 64px 120px rgba(0,0,0,0.85),0 0 0 1px rgba(255,255,255,0.07),inset 0 1px 0 rgba(255,255,255,0.09)'}}>
       {[[true,118,32],[true,162,32],[true,210,68],[false,166,82]].map(([l,top,h],i)=>(
@@ -2333,10 +2333,19 @@ export default function App(){
   const [session, setSession] = React.useState(undefined);
 
   React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => setSession(session))
+      .catch(() => setSession(null));
+    // Fallback: if getSession hangs (can happen on native), fall through to auth after 4s
+    const timeout = setTimeout(() => setSession(s => s === undefined ? null : s), 4000);
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); clearTimeout(timeout); };
   }, []);
+
+  // Wrapper style: center the phone mockup on web, fill the screen on native
+  const wrapStyle = isNative()
+    ? { width:'100%', minHeight:'100dvh', background:'#050a07' }
+    : { display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' };
 
   const storageKey = session ? `dialed_v4_${session.user.id}` : 'dialed_v4';
   const loadState = () => { try { return JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch(e) { return null; } };
@@ -2575,12 +2584,12 @@ export default function App(){
 
   // ── Render ──
   if (session === undefined) {
-    return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#0a0a0a' }}><div style={{ fontSize:32 }}>⚡</div></div>;
+    return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100dvh', background:'#050a07' }}><div style={{ fontSize:40 }}>⚡</div></div>;
   }
 
   if (!session) {
     return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+      <div style={wrapStyle}>
         <PhoneFrame>
           <BeamsCanvas accent="#7dd3fc" intensity={50}/>
           <FilmGrain/>
@@ -2593,7 +2602,7 @@ export default function App(){
 
   if (!onboarded) {
     return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+      <div style={wrapStyle}>
         <PhoneFrame>
           <BeamsCanvas accent={accent} intensity={50}/>
           <FilmGrain/>
@@ -2605,7 +2614,7 @@ export default function App(){
   }
 
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+    <div style={wrapStyle}>
       <PhoneFrame>
         <BeamsCanvas accent={accent} intensity={tw.beamIntensity}/>
         <FilmGrain/>
