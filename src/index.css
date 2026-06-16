@@ -6,28 +6,15 @@ html, body, #root {
   min-height: 100dvh;
 }
 
-html, body {
-  /* Lock the page so the whole view can't rubber-band up/down on iOS.
-     Individual scrollable areas inside the app handle their own scrolling. */
-  position: fixed;
-  overflow: hidden;
-  width: 100%;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: auto;
-}
-
 body {
   background: #050a07;
   font-family: 'Outfit', sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* Respect iOS safe areas on notched devices */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overscroll-behavior: none;
 }
 
-/* On wide screens (web preview), center the phone mockup.
-   On narrow screens / native, let the app fill the viewport. */
+/* On wide screens (web preview), center the phone mockup. */
 @media (min-width: 431px) {
-  html, body { position: static; overflow: auto; }
   body {
     display: flex;
     align-items: center;
@@ -37,14 +24,6 @@ body {
 
 #root {
   width: 100%;
-  overflow: hidden;
-}
-
-/* Scrollable regions inside the app: allow scroll, kill the bounce */
-.dialed-scroll {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 ::-webkit-scrollbar { display: none; }

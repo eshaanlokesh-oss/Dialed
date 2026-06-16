@@ -106,7 +106,7 @@ function StatusBar(){
 const Lbl = ({children}) => <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.22)',letterSpacing:1.3,textTransform:'uppercase',marginBottom:14}}>{children}</div>;
 
 function PhoneFrame({children}){
-  if(isNative()) return <div style={{width:'100%',height:'100dvh',overflow:'hidden',background:'#050a07',position:'relative'}}>{children}</div>;
+  if(isNative()) return <div style={{width:'100%',height:'100%',overflow:'hidden',background:'#050a07',position:'fixed',top:0,left:0,right:0,bottom:0}}>{children}</div>;
   return(
     <div style={{position:'relative',borderRadius:57,padding:11,background:'linear-gradient(150deg,#262626 0%,#0f0f0f 60%,#1a1a1a 100%)',boxShadow:'0 64px 120px rgba(0,0,0,0.85),0 0 0 1px rgba(255,255,255,0.07),inset 0 1px 0 rgba(255,255,255,0.09)'}}>
       {[[true,118,32],[true,162,32],[true,210,68],[false,166,82]].map(([l,top,h],i)=>(
