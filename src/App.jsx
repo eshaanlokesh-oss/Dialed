@@ -5,24 +5,28 @@ import {
 } from './data.js';
 import { supabase } from './supabase.js';
 import { pushToCloud, pullFromCloud } from './sync.js';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 // ─── Native detection & haptics ───────────────────────────────
 const isNative = () => !!(window.Capacitor?.isNativePlatform?.());
 const haptic = async (style = 'medium') => {
+  if (!isNative()) return;
   try {
-    if (!isNative()) return;
-    const Plugins = window.Capacitor?.Plugins;
-    if (!Plugins?.Haptics) return;
-    const s = style === 'light' ? 'LIGHT' : style === 'heavy' ? 'HEAVY' : 'MEDIUM';
-    await Plugins.Haptics.impact({ style: s });
+    const s = style === 'light' ? ImpactStyle.Light : style === 'heavy' ? ImpactStyle.Heavy : ImpactStyle.Medium;
+    await Haptics.impact({ style: s });
   } catch(e) {}
 };
 const hapticSelect = async () => {
+  if (!isNative()) return;
   try {
-    if (!isNative()) return;
-    const Plugins = window.Capacitor?.Plugins;
-    if (!Plugins?.Haptics) return;
-    await Plugins.Haptics.selectionChanged();
+    await Haptics.selectionChanged();
+  } catch(e) {}
+};
+const hapticNotify = async (type = 'success') => {
+  if (!isNative()) return;
+  try {
+    const t = type === 'warning' ? NotificationType.Warning : type === 'error' ? NotificationType.Error : NotificationType.Success;
+    await Haptics.notification({ type: t });
   } catch(e) {}
 };
 
